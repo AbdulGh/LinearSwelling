@@ -16,5 +16,5 @@ def getFloatFromEntry(entry, mini=None, maxi=None, forceInt=False):
         except ValueError:
             messagebox.showerror("Error", "Value for '" + entry.cname + "' is not numerical")
 
-def getCurrentReading():
+def getCurrentReading(num):
         return random.randint(0, 10)

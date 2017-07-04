@@ -1,4 +1,5 @@
 import calibration
+import settings
 import measure
 
 from tkinter import *
@@ -24,9 +25,12 @@ class MainWindow(Tk):
             self.withdraw()
             calibrationWindow = calibration.CalibrationWindow(self)
             self.wait_window(calibrationWindow)
-            t = calibrationWindow.getsettings()
-            if t is not None:
-                m,b = t
+            if calibrationWindow.done:
+                paramList = []
+                for i in range(settings.numsensors):
+                    paramList.append(calibrationWindow.getSettings(i))
+                print(paramList)
+
             else:
                 self.deiconify()
 

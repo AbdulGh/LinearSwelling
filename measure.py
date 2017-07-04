@@ -126,9 +126,9 @@ class ExperimentWindow(Toplevel):
         readingUpdate()
 
     def getCurrentDisplacement(self):
-        if self.initialRecording is None:
+        if self.initialReading is None:
             raise "Displacement asked for before recording started"
-        return self.m * (tools.getCurrentReading() - self.initialRecording) + self.b
+        return self.m * (tools.getCurrentReading() - self.initialReading) + self.b
 
     def initGraphFrame(self, fr):
         f = Figure(figsize=(8, 5), dpi=100)

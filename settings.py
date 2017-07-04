@@ -1,0 +1,1 @@
+numsensors = 4
