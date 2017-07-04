@@ -23,6 +23,9 @@ class CalibrationWindow(Toplevel):
         self.ys = []
         self.results = []
 
+        if master is not None:
+            self.geometry("+%d+%d" % (master.winfo_rootx() - 300, master.winfo_rooty() - 200))
+
         """
         if not self.initial_focus:
             self.initial_focus = self
@@ -30,11 +33,9 @@ class CalibrationWindow(Toplevel):
         self.initial_focus.focus_set()
         """
 
-        self.protocol("WM_DELETE_WINDOW", self.fin)
+        #self.protocol("WM_DELETE_WINDOW", self.fin)
 
         self.initwindow()
-
-        self.wait_window(self)
 
     def initwindow(self):
         #self.pack(fill=BOTH, expand=True, padx=6, pady=6)
@@ -75,11 +76,11 @@ class CalibrationWindow(Toplevel):
         self.measurementFrame = measurementFrame
 
         cancelBtn = Button(measurementFrame, text="Cancel", command=self.stopReadings)
-        cancelBtn.grid(row=0, column=0, padx=2)
+        cancelBtn.grid(row=0, column=1, padx=2)
         cancelBtn.config(state=DISABLED)
         self.cancelBtn = cancelBtn
         startBtn = Button(measurementFrame, text="Start", command=self.startReadings)
-        startBtn.grid(row=0, column=1, padx=2)
+        startBtn.grid(row=0, column=2, padx=2)
         self.startBtn = startBtn
 
         curReading = Label(measurementFrame)
@@ -105,7 +106,7 @@ class CalibrationWindow(Toplevel):
             items = map(int, resList.curselection())
             print(items)
 
-        menu = Menu(listFrame, tearoff=0)
+        menu = Menu(resList, tearoff=0)
         menu.add_command(label="Delete", command=deleteSelected)
 
         def popup(event):
@@ -125,6 +126,8 @@ class CalibrationWindow(Toplevel):
         bottomBtnFrame.pack(side=BOTTOM, fill=X)
         exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
         exitBtn.pack(side=RIGHT, padx=5, pady=5)
+        exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
+        exportBtn.pack(side=RIGHT)
 
     class CalibrationResult:
         def __init__(self, dist, inductionList):
@@ -136,6 +139,32 @@ class CalibrationWindow(Toplevel):
 
         def toStr(self):
             return str(self.dist) + "mm    -    " + str(round(self.mean,3)) + "V    -    SD " + str(round(self.SD, 3)) + "V"
+
+        def export(self):
+            string = "Distance: " + str(self.dist) + "mm\n"
+            string += "Calculated mean: " + str(self.mean) + "\tCalculated SD: " + str(self.SD) + '\n'
+            string += "Num points: " + str(len(self.inductionList)) + "\n"
+            string += "DAQ inputs:\n"
+            for i in range(len(self.inductionList)):
+                string += str(i) + " - " + str(self.inductionList[i]) + "\n"
+            return string
+
+    def exportReadings(self):
+        f = filedialog.asksaveasfile(mode='w')
+        if f is not None:
+            string = ""
+            if len(self.results) > 1:
+                m, b, r, _, _ = scipy.stats.linregress(self.xs, self.ys)
+                string += "Regression line: y = " + str(m) + "x + " + str(b) + "\n"
+                string += "r-value: " + str(r) + "\n"
+            else:
+                string += "Not enough readings to form a line\n"
+            string += "Total # of readings: " + str(len(self.results)) + "\n"
+            for i in range(len(self.results)):
+                string += "---Reading " + str(i) + "---\n"
+                string += self.results[i].export()
+            f.write(string)
+            f.close()
 
     def startReadings(self):
         distance = tools.getFloatFromEntry(self.vernEntry, mini=0.1)
@@ -249,7 +278,7 @@ class CalibrationWindow(Toplevel):
         if (len(self.xs) < 2):
             result = messagebox.askquestion("Not enough points", "Cancel calibration?", icon='warning')
             if result == "yes":
-                self.master.destroy()
+                self.destroy()
         else:
             done = False
             while not done:
@@ -260,10 +289,10 @@ class CalibrationWindow(Toplevel):
                         m, b = self.getsettings()
                         f.write(str(m) + '\n' + str(b))
                         f.close()
-                        self.master.destroy()
+                        self.destroy()
                         done = True
                 else:
-                    self.master.destroy()
+                    self.destroy()
                     done = True
 
     def getsettings(self):

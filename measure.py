@@ -12,16 +12,18 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
-class ExperimentWindow(Frame):
+class ExperimentWindow(Toplevel):
     def __init__(self, master, m, b):
-        Frame.__init__(self, master)
-        self.master = master
+        Toplevel.__init__(self, master)
         self.m = m
         self.b = b
+        print(m, b)
         self.initialReading = None
-        """self.master.minsize(1100,550)
-        self.master.geometry("1100x550")"""
-        self.master.resizable(False, False)
+        self.readoutAfterID = None
+        self.title("Swellometer measurement")
+        """self.minsize(1100,550)
+        self.geometry("1100x550")"""
+        self.resizable(False, False)
 
         self.xs = []
         self.ys = []
@@ -29,9 +31,6 @@ class ExperimentWindow(Frame):
         self.initwindow()
 
     def initwindow(self):
-        self.master.title("Swellometer measurement")
-        self.pack(fill=BOTH, expand=True, padx=6, pady=6)
-
         mainFrame = Frame(self)
         mainFrame.pack(side=TOP, fill=BOTH, expand=True)
 
@@ -81,24 +80,34 @@ class ExperimentWindow(Frame):
         exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
         exitBtn.pack(side=RIGHT, padx=5, pady=5)
 
-    def startRecording():
-        seconds = getFloatFromEntry(self.secondsEntry, mini=0, forceInt=True)
-        rate = getFloatFromEntry(self.rateEntry, mini=0)
+    def cancelRecording(self): #todo
+        pass
 
-        if (distance is None or rate is None):
+    def fin(self):
+        pass
+
+    def stopReadings(self):
+        pass
+
+    def startRecording(self):
+        seconds = tools.getFloatFromEntry(self.secondsEntry, mini=0, forceInt=True)
+        rate = tools.getFloatFromEntry(self.rateEntry, mini=0)
+
+        if (seconds is None or rate is None):
             return
 
-        self.initialReading = getCurrentReading()
+        self.initialReading = tools.getCurrentReading()
         totalNo = seconds * rate
-        seconds = int(seconds)
         rate = int(1000/rate)
 
         self.cancelBtn.config(state=NORMAL)
         self.startBtn.config(state=DISABLED)
 
+        currentReadings = []
+
         def takeSingleResult():
-            if len(currentReadings) == totalNo:
-                finalise()
+            if len(currentReadings) == totalNo: #all todo
+                self.fin()
                 self.stopReadings()
                 return
 
@@ -107,9 +116,9 @@ class ExperimentWindow(Frame):
             self.measurementAfterID = self.measurementFrame.after(rate, takeSingleResult)
 
     def currentReadingUpdate(self, label):
-        update = int(1000 / getFloatFromEntry(self.rateEntry, mini=0))
+        update = int(1000 / tools.getFloatFromEntry(self.rateEntry, mini=0))
         def readingUpdate():
-            i = self.getCurrentReading()
+            i = tools.getCurrentReading()
             label.config(text="Current displacement(mm): " + str(i))
             self.readoutAfterID = label.after(update, readingUpdate)
         if self.readoutAfterID is not None:
@@ -119,7 +128,7 @@ class ExperimentWindow(Frame):
     def getCurrentDisplacement(self):
         if self.initialRecording is None:
             raise "Displacement asked for before recording started"
-        return m * (getCurrentReading() - self.initialRecording) + b
+        return self.m * (tools.getCurrentReading() - self.initialRecording) + self.b
 
     def initGraphFrame(self, fr):
         f = Figure(figsize=(8, 5), dpi=100)
@@ -140,3 +149,8 @@ class ExperimentWindow(Frame):
 
         canvas.get_tk_widget().pack(fill=BOTH, expand=True)
         return wrapper
+
+if __name__ == '__main__':
+    root = Tk()
+    measure = ExperimentWindow(root, 1, 1)
+    root.wait_window(measure)

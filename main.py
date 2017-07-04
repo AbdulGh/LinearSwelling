@@ -21,10 +21,17 @@ class MainWindow(Tk):
         Label(self, text="Swellometer", font="Helvetica 16").pack(pady=10)
 
         def calibrationOption():
+            self.withdraw()
             calibrationWindow = calibration.CalibrationWindow(self)
-            m,b = calibrationWindow.getsettings()
+            self.wait_window(calibrationWindow)
+            t = calibrationWindow.getsettings()
+            if t is not None:
+                m,b = t
+            else:
+                self.deiconify()
 
-            calibrationWindow = calibration.CalibrationWindow(self)
+            #experimentWindow = measure.ExperimentWindow(self, m, b)
+            #self.wait_window(experimentWindow)
 
         launchCalibration = Button(self, text="Calibrate sensors", command=calibrationOption)
         launchCalibration.pack(pady=10)
@@ -41,9 +48,9 @@ class MainWindow(Tk):
                 except ValueError:
                     messagebox.showerror("Invalid file", "Could not read line from this file")
 
-            if m is not None:
-                root = Tk()
-                calibrationWindow = measure.ExperimentWindow(root)
+            #if m is not None:
+                #experimentWindow = measure.ExperimentWindow(self, m, b)
+                #self.wait_window(experimentWindow)
 
         loadCalibration = Button(self, text="Load calibration", command=loadSettingsOption)
         loadCalibration.pack(pady=10)
