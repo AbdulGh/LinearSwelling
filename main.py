@@ -44,6 +44,7 @@ class MainWindow(Tk):
         def loadSettingsOption():
             f = filedialog.askopenfilename()
             if f is not None:
+                self.withdraw()
                 paramList = []
                 try:
                     f = open(f)
@@ -54,9 +55,9 @@ class MainWindow(Tk):
                         b = float(b)
                         paramList.append([m,b])
                     f.close()
-                except Exception as e:
-                    print(e)
+                except:
                     messagebox.showerror("Invalid file", "Could not read from this file")
+                    self.deiconify()
                     return
                 experimentWindow = measure.ExperimentWindow(self, paramList)
                 self.wait_window(experimentWindow)

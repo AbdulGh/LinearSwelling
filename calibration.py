@@ -51,7 +51,7 @@ class CalibrationWindow(Toplevel):
             self.sensorentries.append(entry)
 
         readingsL = Label(inputFrame, text="Total # of readings: ", width=20)
-        readingsL.grid(row=4, column=0, padx=5, pady=5)
+        readingsL.grid(row=settings.numsensors, column=0, padx=5, pady=5)
         readingsEntry = Entry(inputFrame)
         readingsEntry.insert(0, "20")
         readingsEntry.cname = "Total # of readings"
@@ -59,7 +59,7 @@ class CalibrationWindow(Toplevel):
         self.readingsEntry = readingsEntry
 
         rateL = Label(inputFrame, text="Readings/second: ", width=20)
-        rateL.grid(row=5, column=0, padx=5, pady=5)
+        rateL.grid(row=settings.numsensors + 1, column=0, padx=5, pady=5)
         rateEntry = Entry(inputFrame)
         rateEntry.insert(0, "2")
         rateEntry.cname = "Readings/second"
@@ -67,22 +67,24 @@ class CalibrationWindow(Toplevel):
         self.rateEntry = rateEntry
 
         measurementFrame = Frame(leftFrame)
-        measurementFrame.grid(row=3, column=0, rowspan=5, columnspan=3)
+        measurementFrame.grid(row=4, column=0, rowspan=5, columnspan=3)
         self.measurementFrame = measurementFrame
 
         cancelBtn = Button(measurementFrame, text="Cancel", command=self.stopReadings)
-        cancelBtn.grid(row=0, column=0, padx=2)
+        cancelBtn.grid(row=0, column=0, padx=2, pady=(10,2))
         cancelBtn.config(state=DISABLED)
         self.cancelBtn = cancelBtn
         startBtn = Button(measurementFrame, text="Start", command=self.startReadings)
-        startBtn.grid(row=0, column=1, padx=2)
+        startBtn.grid(row=0, column=1, padx=2, pady=(10,2))
         self.startBtn = startBtn
 
         curNumTaken = Label(measurementFrame, text="Readings taken: 0")
-        curNumTaken.grid(row=3, column=0, columnspan=2)
+        curNumTaken.grid(row=1, column=0, columnspan=2, pady=(2,10))
         self.curNumTaken = curNumTaken
 
         listFrame = Frame(leftFrame, width=50)
+        listFrame.grid(row=10, rowspan=13, column=0, columnspan=3, padx=6, sticky=N + S + W + E)
+        leftFrame.rowconfigure(10, weight=1)
         scrollbar = Scrollbar(listFrame)
         resList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("distance", "mean", "std"))
         resList["show"] = "headings"
@@ -114,7 +116,6 @@ class CalibrationWindow(Toplevel):
             menu.post(event.x_root, event.y_root)
 
         listFrame.bind("<Button-3>", popup)
-        listFrame.grid(row=7, rowspan=9, column=0, columnspan=3, padx=6, sticky=N+S+W+E)
 
         scrollbar.pack(side=RIGHT, fill=Y)
         self.resList = resList
@@ -182,12 +183,12 @@ class CalibrationWindow(Toplevel):
                 return
             distances.append(d)
 
-        rate = tools.getFloatFromEntry(self.rateEntry, mini=0)
+        rate = tools.getFloatFromEntry(self.rateEntry, mini=0, maxi=4)
         totalNo = tools.getFloatFromEntry(self.readingsEntry, mini=1, forceInt=True)
         if (rate is None or totalNo is None):
             return
 
-        rate = int(1000/rate)
+        rate = 1000/rate
         totalNo = int(totalNo)
 
         self.cancelBtn.config(state=NORMAL)
