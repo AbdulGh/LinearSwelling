@@ -5,7 +5,7 @@ from tkinter.ttk import *
 import scipy.stats
 import tools
 import matplotlib
-
+import datetime
 import settings
 
 matplotlib.use("TkAgg")
@@ -159,9 +159,10 @@ class CalibrationWindow(Toplevel):
     def exportReadings(self):
         f = filedialog.asksaveasfile(mode='w')
         if f is not None:
+            f.write("Calibration report - " + str(datetime.datetime.now()) + "\n")
             for s in range(settings.numsensors):
                 values = list(self.results[s].values())
-                string = "***Sensor " + str(s+1) + "***\n"
+                string = "\n***Sensor " + str(s+1) + "***\n"
                 if len(values) > 1:
                     m, b, r = self.getSettings(s)
                     string += "Regression line: y = " + str(m) + "x + " + str(b) + "\n"
@@ -188,7 +189,7 @@ class CalibrationWindow(Toplevel):
         if (rate is None or totalNo is None):
             return
 
-        rate = 1000/rate
+        rate = int(1000/rate)
         totalNo = int(totalNo)
 
         self.cancelBtn.config(state=NORMAL)

@@ -4,10 +4,9 @@ from tkinter import filedialog
 from tkinter.ttk import *
 import numpy as np
 import random
-
 import tools
-
 import settings
+import datetime
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -20,7 +19,7 @@ class ExperimentWindow(Toplevel):
         Toplevel.__init__(self, master)
         self.paramList = paramList
         self.initialReadings = [0 for _ in range(settings.numsensors)]
-        self.readoutAfterID = None
+        self.currentReadings = None
         self.title("Swellometer measurement")
         self.resizable(False, False)
 
@@ -55,7 +54,7 @@ class ExperimentWindow(Toplevel):
 
         btnFrame = Frame(measurementFrame)
         btnFrame.grid(row=0, column=0, rowspan=1, columnspan=3)
-        stopBtn = Button(btnFrame, text="Stop", command=self.cancelRecording)
+        stopBtn = Button(btnFrame, text="Stop", command=self.stopRecording)
         stopBtn.grid(row=0, column=0, padx=2)
         stopBtn.config(state=DISABLED)
         self.stopBtn = stopBtn
@@ -79,14 +78,39 @@ class ExperimentWindow(Toplevel):
 
         bottomBtnFrame = Frame(self)
         bottomBtnFrame.pack(side=BOTTOM, fill=X)
-        exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
-        exitBtn.pack(side=RIGHT, padx=5, pady=5)
+        Button(bottomBtnFrame, text="Done", command=self.fin).pack(side=RIGHT, padx=5, pady=5)
+        self.exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
+        self.exportBtn.pack(side=RIGHT, padx=(5,0))
+        self.exportBtn.config(state=DISABLED)
 
-    def cancelRecording(self): #todo
+    def exportReadings(self):
+        if self.currentReadings is None:
+            messagebox.showerror("No readings", "Please take some readings first")
+            return
+
+        f = filedialog.asksaveasfile(mode='w')
+        if f is not None:
+            delay = self.lastrate / 1000
+            f.write("Calibration report - " + str(datetime.datetime.now()) + "\nRate - " + str(self.lastrate) + "\nTime(s) - Displacement(mm)\n")
+            for s in range(len(self.currentReadings)):
+                string = "\n***Sensor " + str(s) + "***\n"
+                for i in range(len(self.currentReadings[s])):
+                    string += str(round(delay * i, 4)) + " " + str(self.currentReadings[s][i]) + "\n"
+                f.write(string)
+            f.close()
+
+    def stopRecording(self): #todo
+        if self.animation is None:
+            raise "check"
+
+        self.animation.event_source.stop()
+
         self.stopBtn.config(state=DISABLED)
         self.startBtn.config(state=NORMAL)
         self.timeEntry.config(state=NORMAL)
         self.rateEntry.config(state=NORMAL)
+
+        self.exportBtn.config(state=NORMAL)
 
     def fin(self):
         pass
@@ -95,6 +119,11 @@ class ExperimentWindow(Toplevel):
         pass
 
     def startRecording(self):
+        if self.currentReadings is not None:
+            result = messagebox.askquestion("Clear readings", "Discard current readings?", icon='warning')
+            if result == "no":
+                return
+
         time = tools.getFloatFromEntry(self.timeEntry, mini=0)
         rate = tools.getFloatFromEntry(self.rateEntry, mini=0.01)
 
@@ -102,7 +131,7 @@ class ExperimentWindow(Toplevel):
             return
 
         totalNo = time * rate * 60
-        rate = 1000/rate
+        rate = self.lastrate = 1000/rate
 
         self.graph.set_xlim([0, time])
 
@@ -111,21 +140,17 @@ class ExperimentWindow(Toplevel):
         self.timeEntry.config(state=DISABLED)
         self.rateEntry.config(state=DISABLED)
 
-        currentReadings = [[] for _ in range(settings.numsensors)]
+        self.currentReadings = [[] for _ in range(settings.numsensors)]
         self.xs = np.linspace(0, time, totalNo)
 
         def takeSingleResult(_):
-            if len(currentReadings) == totalNo:
-                self.stopBtn.config(state=DISABLED)
-                self.startBtn.config(state=NORMAL)
-                self.timeEntry.config(state=NORMAL)
-                self.rateEntry.config(state=NORMAL)
-                self.animation.event_source.stop()
+            if len(self.currentReadings) == totalNo:
+                self.stopRecording()
                 return
             for i in range(settings.numsensors):
-                currentReadings[i].append(self.getCurrentDisplacement(i))
+                self.currentReadings[i].append(self.getCurrentDisplacement(i))
                 plot = self.plots[i]
-                plot.set_data(self.xs[:len(currentReadings[i])], currentReadings[i])
+                plot.set_data(self.xs[:len(self.currentReadings[i])], self.currentReadings[i])
 
             return self.plots
 
