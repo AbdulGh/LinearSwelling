@@ -29,7 +29,8 @@ class MainWindow(Tk):
                 paramList = []
                 for i in range(settings.numsensors):
                     paramList.append(calibrationWindow.getSettings(i))
-                print(paramList)
+                experimentWindow = measure.ExperimentWindow(self, paramList)
+                self.wait_window(experimentWindow)
 
             else:
                 self.deiconify()
@@ -42,19 +43,23 @@ class MainWindow(Tk):
 
         def loadSettingsOption():
             f = filedialog.askopenfilename()
-            m = b = None
             if f is not None:
+                paramList = []
                 try:
-                    m = f.readline()
-                    b = f.readline()
-                    m = float(m)
-                    b = float(b)
-                except ValueError:
-                    messagebox.showerror("Invalid file", "Could not read line from this file")
-
-            #if m is not None:
-                #experimentWindow = measure.ExperimentWindow(self, m, b)
-                #self.wait_window(experimentWindow)
+                    f = open(f)
+                    for i in range(settings.numsensors):
+                        m = f.readline()
+                        b = f.readline()
+                        m = float(m)
+                        b = float(b)
+                        paramList.append([m,b])
+                    f.close()
+                except Exception as e:
+                    print(e)
+                    messagebox.showerror("Invalid file", "Could not read from this file")
+                    return
+                experimentWindow = measure.ExperimentWindow(self, paramList)
+                self.wait_window(experimentWindow)
 
         loadCalibration = Button(self, text="Load calibration", command=loadSettingsOption)
         loadCalibration.pack(pady=10)

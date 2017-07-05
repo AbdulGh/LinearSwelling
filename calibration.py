@@ -24,7 +24,7 @@ class CalibrationWindow(Toplevel):
 
         self.readoutAfterID = None
         self.measurementAfterID = None
-        self.results = [{} for i in range(settings.numsensors)]
+        self.results = [{} for _ in range(settings.numsensors)]
         self.done = False
 
         if master is not None:
@@ -37,7 +37,7 @@ class CalibrationWindow(Toplevel):
         mainFrame.pack(side=TOP, fill=BOTH, expand=True)
 
         leftFrame = Frame(mainFrame)
-        leftFrame.pack(side=TOP, fill=BOTH, expand=True)
+        leftFrame.pack(side=LEFT, fill=BOTH, expand=True)
 
         inputFrame = Frame(leftFrame)
         inputFrame.grid(row=0, column=0, rowspan=3, columnspan=3)
@@ -119,8 +119,8 @@ class CalibrationWindow(Toplevel):
         scrollbar.pack(side=RIGHT, fill=Y)
         self.resList = resList
 
-        graph = self.initGraphFrame(leftFrame) #todo see what happens when this is put in the right place
-        graph.grid(row=0, column=3, rowspan=15, columnspan=4)
+        graph = self.initGraphFrame(mainFrame)
+        graph.pack(side=RIGHT, fill=BOTH, expand=True)
 
         bottomBtnFrame = Frame(self)
         bottomBtnFrame.pack(side=BOTTOM, fill=X)
@@ -212,7 +212,7 @@ class CalibrationWindow(Toplevel):
                     res = cr
                 
                 if res.mean > self.maxY:
-                    self.maxY = cr.mean + 1
+                    self.maxY = res.mean + 1
 
                 self.resList.insert(self.sensorTreeviewIDs[i], "end", values=(distance, res.mean, round(res.SD, 3)))
 

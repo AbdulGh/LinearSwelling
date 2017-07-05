@@ -6,6 +6,8 @@ import scipy.stats
 
 import tools
 
+import settings
+
 import matplotlib
 import matplotlib.animation
 matplotlib.use("TkAgg")
@@ -13,20 +15,13 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 class ExperimentWindow(Toplevel):
-    def __init__(self, master, m, b):
+    def __init__(self, master, paramList):
         Toplevel.__init__(self, master)
-        self.m = m
-        self.b = b
-        print(m, b)
-        self.initialReading = None
+        self.paramList = paramList
+        self.initialReading = [0 for _ in range(settings.numsensors)]
         self.readoutAfterID = None
         self.title("Swellometer measurement")
-        """self.minsize(1100,550)
-        self.geometry("1100x550")"""
         self.resizable(False, False)
-
-        self.xs = []
-        self.ys = []
 
         self.initwindow()
 
@@ -54,6 +49,8 @@ class ExperimentWindow(Toplevel):
         rateEntry.grid(row=2, column=1, padx=5)
         self.rateEntry = rateEntry
 
+        checkboxFrame = Frame(leftFrame)
+
         measurementFrame = Frame(leftFrame)
         measurementFrame.grid(row=2, column=0, rowspan=5, columnspan=3, pady=6)
         self.measurementFrame = measurementFrame
@@ -67,10 +64,6 @@ class ExperimentWindow(Toplevel):
         startBtn = Button(btnFrame, text="Start", command=self.startRecording)
         startBtn.grid(row=0, column=1, padx=2)
         self.startBtn = startBtn
-
-        curReading = Label(measurementFrame)
-        self.currentReadingUpdate(curReading)
-        curReading.grid(row=1, column=0, columnspan=2)
 
         graph = self.initGraphFrame(leftFrame)
         graph.grid(row=0, column=3, rowspan=15, columnspan=4)
@@ -96,7 +89,6 @@ class ExperimentWindow(Toplevel):
         if (seconds is None or rate is None):
             return
 
-        self.initialReading = tools.getCurrentReading()
         totalNo = seconds * rate
         rate = int(1000/rate)
 
@@ -111,24 +103,18 @@ class ExperimentWindow(Toplevel):
                 self.stopReadings()
                 return
 
-            i = self.getCurrentDisplacement()
+            i = self.getCurrentDisplacements()
             currentReadings.append(i)
             self.measurementAfterID = self.measurementFrame.after(rate, takeSingleResult)
 
-    def currentReadingUpdate(self, label):
-        update = int(1000 / tools.getFloatFromEntry(self.rateEntry, mini=0))
-        def readingUpdate():
-            i = tools.getCurrentReading()
-            label.config(text="Current displacement(mm): " + str(i))
-            self.readoutAfterID = label.after(update, readingUpdate)
-        if self.readoutAfterID is not None:
-            label.after_cancel(self.readoutAfterID)
-        readingUpdate()
-
-    def getCurrentDisplacement(self):
+    def getCurrentDisplacements(self):
         if self.initialReading is None:
             raise "Displacement asked for before recording started"
-        return self.m * (tools.getCurrentReading() - self.initialReading) + self.b
+        displacements = []
+        for i in range(settings.numsensors):
+            m,b = self.paramList[i]
+            displacements.append(m * (tools.getCurrentReading(i) - self.initialReading) + b)
+        return displacements
 
     def initGraphFrame(self, fr):
         f = Figure(figsize=(8, 5), dpi=100)
@@ -139,7 +125,7 @@ class ExperimentWindow(Toplevel):
         self.maxY = 10
         a.set_xlim([0,self.maxX])
         a.set_ylim([0,self.maxY])
-        a.scatter(self.xs, self.ys)
+        a.scatter([], [])
         self.graph = a
 
         wrapper = Frame(fr)
@@ -149,6 +135,17 @@ class ExperimentWindow(Toplevel):
 
         canvas.get_tk_widget().pack(fill=BOTH, expand=True)
         return wrapper
+
+    """
+    def currentReadingUpdate(self, label):
+        update = int(1000 / tools.getFloatFromEntry(self.rateEntry, mini=0))
+        def readingUpdate():
+            i = tools.getCurrentReading()
+            label.config(text="Current displacement(mm): " + str(i))
+            self.readoutAfterID = label.after(update, readingUpdate)
+        if self.readoutAfterID is not None:
+            label.after_cancel(self.readoutAfterID)
+        readingUpdate()"""
 
 if __name__ == '__main__':
     root = Tk()
