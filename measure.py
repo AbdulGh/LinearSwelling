@@ -7,6 +7,7 @@ import random
 import tools
 import settings
 import datetime
+from time import *
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -20,8 +21,13 @@ class ExperimentWindow(Toplevel):
         self.paramList = paramList
         self.initialReadings = [0 for _ in range(settings.numsensors)]
         self.currentReadings = None
+        self.exported = False
         self.title("Swellometer measurement")
         self.resizable(False, False)
+
+        self.style = Style()
+        if "clam" in self.style.theme_names():
+            self.style.theme_use("clam")
 
         self.initwindow()
 
@@ -29,31 +35,27 @@ class ExperimentWindow(Toplevel):
         mainFrame = Frame(self)
         mainFrame.pack(side=TOP, fill=BOTH, expand=True)
 
-        leftFrame = Frame(mainFrame)
-        leftFrame.pack(side=TOP, fill=BOTH, expand=True)
+        topFrame = Frame(mainFrame)
+        topFrame.pack(side=TOP, fill=BOTH, expand=True)
 
-        inputFrame = Frame(leftFrame)
-        inputFrame.grid(row=0, column=0, rowspan=3, columnspan=3)
+        inputFrame = Frame(topFrame)
+        inputFrame.pack(side=LEFT, padx=8, pady=8)
         Label(inputFrame, text="Duration (m): ", width=15).grid(row=0, column=0, padx=5, pady=5)
         timeEntry = Entry(inputFrame)
         timeEntry.cname = "Duration"
         timeEntry.grid(row=0, column=1, padx=5)
         self.timeEntry = timeEntry
 
-        rateL = Label(inputFrame, text="Readings/second: ", width=15)
+        rateL = Label(inputFrame, text="Readings/minute: ", width=15)
         rateL.grid(row=2, column=0, padx=5, pady=5)
         rateEntry = Entry(inputFrame)
         rateEntry.insert(0, "2")
-        rateEntry.cname = "Readings/second"
+        rateEntry.cname = "Readings/minute"
         rateEntry.grid(row=2, column=1, padx=5)
         self.rateEntry = rateEntry
 
-        measurementFrame = Frame(leftFrame)
-        measurementFrame.grid(row=1, column=0, rowspan=5, columnspan=3, pady=6)
-        self.measurementFrame = measurementFrame
-
-        btnFrame = Frame(measurementFrame)
-        btnFrame.grid(row=0, column=0, rowspan=1, columnspan=3)
+        btnFrame = Frame(topFrame)
+        btnFrame.pack(side=RIGHT, padx=8, pady=8)
         stopBtn = Button(btnFrame, text="Stop", command=self.stopRecording)
         stopBtn.grid(row=0, column=0, padx=2)
         stopBtn.config(state=DISABLED)
@@ -62,8 +64,8 @@ class ExperimentWindow(Toplevel):
         startBtn.grid(row=0, column=1, padx=2)
         self.startBtn = startBtn
 
-        graph = self.initGraphFrame(leftFrame)
-        graph.grid(row=0, column=3, rowspan=15, columnspan=4)
+        graph = self.initGraphFrame(mainFrame)
+        graph.pack(side=RIGHT, fill=BOTH, padx=8, pady=8)
 
         """
         checkboxFrame = Frame(leftFrame)
@@ -78,7 +80,7 @@ class ExperimentWindow(Toplevel):
 
         bottomBtnFrame = Frame(self)
         bottomBtnFrame.pack(side=BOTTOM, fill=X)
-        Button(bottomBtnFrame, text="Done", command=self.fin).pack(side=RIGHT, padx=5, pady=5)
+        Button(bottomBtnFrame, text="Done", command=self.fin).pack(side=RIGHT, padx=8, pady=8)
         self.exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
         self.exportBtn.pack(side=RIGHT, padx=(5,0))
         self.exportBtn.config(state=DISABLED)
@@ -90,16 +92,17 @@ class ExperimentWindow(Toplevel):
 
         f = filedialog.asksaveasfile(mode='w')
         if f is not None:
-            delay = self.lastrate / 1000
-            f.write("Calibration report - " + str(datetime.datetime.now()) + "\nRate - " + str(self.lastrate) + "\nTime(s) - Displacement(mm)\n")
+            f.write("Calibration report - " + str(datetime.datetime.now()) + "\nRate - " + str(self.lastrate) + "\nTime(s) - Displacement(mm) - Voltage(mV)\n")
             for s in range(len(self.currentReadings)):
                 string = "\n***Sensor " + str(s) + "***\n"
+                string += "Recieved calibration line: y = " + str(self.paramList[s][0]) + " x + " + str(self.paramList[s][1]) + "\n"
                 for i in range(len(self.currentReadings[s])):
-                    string += str(round(delay * i, 4)) + " " + str(self.currentReadings[s][i]) + "\n"
+                    string += str(round(self.actualTimes[s][i] * 10, 4)) + " " + str(self.currentReadings[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
                 f.write(string)
             f.close()
+            self.exported = True
 
-    def stopRecording(self): #todo
+    def stopRecording(self):
         if self.animation is None:
             raise "check"
 
@@ -113,25 +116,28 @@ class ExperimentWindow(Toplevel):
         self.exportBtn.config(state=NORMAL)
 
     def fin(self):
-        pass
-
-    def updateGraph(self):
-        pass
+        if self.currentReadings is not None and not self.exported:
+            result = messagebox.askquestion("Results not exported", "Save results first?", icon='warning')
+            if result == "yes":
+                self.exportReadings()
+        self.destroy()
 
     def startRecording(self):
-        if self.currentReadings is not None:
-            result = messagebox.askquestion("Clear readings", "Discard current readings?", icon='warning')
+        if self.currentReadings is not None and not self.exported:
+            result = messagebox.askquestion("Results not exported", "Discard current readings?", icon='warning')
             if result == "no":
                 return
 
+        self.exported = False
+
         time = tools.getFloatFromEntry(self.timeEntry, mini=0)
-        rate = tools.getFloatFromEntry(self.rateEntry, mini=0.01)
+        rate = tools.getFloatFromEntry(self.rateEntry, mini=0.01, maxi=120)
 
         if (time is None or rate is None):
             return
 
-        totalNo = time * rate * 60
-        rate = self.lastrate = 1000/rate
+        totalNo = int(time * rate)
+        rate = self.lastrate = 60000/rate
 
         self.graph.set_xlim([0, time])
 
@@ -141,19 +147,24 @@ class ExperimentWindow(Toplevel):
         self.rateEntry.config(state=DISABLED)
 
         self.currentReadings = [[] for _ in range(settings.numsensors)]
+        self.currentVoltages = [[] for _ in range(settings.numsensors)]
+        self.actualTimes = [[] for _ in range(settings.numsensors)]
         self.xs = np.linspace(0, time, totalNo)
 
-        def takeSingleResult(_):
-            if len(self.currentReadings) == totalNo:
+        def takeSingleResult(_): #takes <=3.5ms starting empty w/ random input
+            if len(self.currentReadings[0]) >= totalNo:
                 self.stopRecording()
                 return
             for i in range(settings.numsensors):
-                self.currentReadings[i].append(self.getCurrentDisplacement(i))
+                d, v = self.getCurrentDisplacement(i)
+                self.currentReadings[i].append(d)
+                self.currentVoltages[i].append(v)
+                self.actualTimes[i].append(clock() - self.lastStartTime)
                 plot = self.plots[i]
                 plot.set_data(self.xs[:len(self.currentReadings[i])], self.currentReadings[i])
-
             return self.plots
 
+        self.lastStartTime = clock()
         self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=False)
         self.canvas.show()
 
@@ -161,9 +172,11 @@ class ExperimentWindow(Toplevel):
         if i > len(self.initialReadings) or self.initialReadings[i] is None:
             raise "Displacement asked for before recording started"
         m,b = self.paramList[i] #todo
-        return 1 + 2 * i + random.uniform(-0.3, 0.3) #m * (tools.getCurrentReading(i) - self.initialReadings[i]) + b
+        return [1 + 2 * i + random.uniform(-0.3, 0.3), random.randint(0, 10)] #m * tools.getCurrentReading(i) - self.initialReadings[i]) + b
 
     def initGraphFrame(self, fr):
+        if "dark_background" in plt.style.available:
+            plt.style.use("dark_background")
         f = plt.figure(figsize=(8, 5), dpi=100)
         self.fig = f
         a = f.add_subplot(111)
@@ -178,7 +191,7 @@ class ExperimentWindow(Toplevel):
             self.plots.append(l)
         self.graph = a
 
-        wrapper = Frame(fr)
+        wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
         canvas = FigureCanvasTkAgg(f, wrapper)
         self.canvas = canvas
         canvas.show()
@@ -198,5 +211,5 @@ class ExperimentWindow(Toplevel):
 
 if __name__ == '__main__':
     root = Tk()
-    measure = ExperimentWindow(root, [[1,1],[2,2],[3,4], [2,2]])
+    measure = ExperimentWindow(None, [[1,1],[2,2],[3,4],[2,2]])
     root.wait_window(measure)

@@ -16,6 +16,10 @@ class MainWindow(Tk):
 
         self.initwindow()
 
+        self.style = Style()
+        if "clam" in self.style.theme_names():
+            self.style.theme_use("clam")
+
         self.mainloop()
 
     def initwindow(self):
@@ -65,7 +69,7 @@ class MainWindow(Tk):
         loadCalibration = Button(self, text="Load calibration", command=loadSettingsOption)
         loadCalibration.pack(pady=10)
 
-        Button(self, text="Close", command=exit).pack(pady=10)
+        Button(self, text="Close", command=exit).pack(pady=(10, 20))
 
 if __name__ == '__main__':
     MainWindow()

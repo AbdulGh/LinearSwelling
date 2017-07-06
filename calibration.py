@@ -27,6 +27,10 @@ class CalibrationWindow(Toplevel):
         self.results = [{} for _ in range(settings.numsensors)]
         self.done = False
 
+        self.style = Style()
+        if "clam" in self.style.theme_names():
+            self.style.theme_use("clam")
+
         if master is not None:
             self.geometry("+%d+%d" % (master.winfo_rootx() - 300, master.winfo_rooty() - 200))
 
@@ -37,21 +41,21 @@ class CalibrationWindow(Toplevel):
         mainFrame.pack(side=TOP, fill=BOTH, expand=True)
 
         leftFrame = Frame(mainFrame)
-        leftFrame.pack(side=LEFT, fill=BOTH, expand=True)
+        leftFrame.pack(side=LEFT, fill=BOTH, expand=True, padx=8, pady=8)
 
         inputFrame = Frame(leftFrame)
         inputFrame.grid(row=0, column=0, rowspan=3, columnspan=3)
 
         self.sensorentries = []
         for i in range(settings.numsensors):
-            Label(inputFrame, text="Distance " + str(i+1) + " (mm): ", width=20).grid(row=i, column=0, padx=5, pady=5)
+            Label(inputFrame, text="Distance " + str(i+1) + " (mm): ", width=20).grid(row=i, column=0, pady=4)
             entry = Entry(inputFrame)
             entry.cname = "Distance " + str(i+1)
             entry.grid(row=i, column=1, padx=5)
             self.sensorentries.append(entry)
 
         readingsL = Label(inputFrame, text="Total # of readings: ", width=20)
-        readingsL.grid(row=settings.numsensors, column=0, padx=5, pady=5)
+        readingsL.grid(row=settings.numsensors, column=0, pady=4)
         readingsEntry = Entry(inputFrame)
         readingsEntry.insert(0, "20")
         readingsEntry.cname = "Total # of readings"
@@ -59,11 +63,11 @@ class CalibrationWindow(Toplevel):
         self.readingsEntry = readingsEntry
 
         rateL = Label(inputFrame, text="Readings/second: ", width=20)
-        rateL.grid(row=settings.numsensors + 1, column=0, padx=5, pady=5)
+        rateL.grid(row=settings.numsensors + 1, column=0, pady=4)
         rateEntry = Entry(inputFrame)
         rateEntry.insert(0, "2")
         rateEntry.cname = "Readings/second"
-        rateEntry.grid(row=5, column=1, padx=5)
+        rateEntry.grid(row=5, column=1)
         self.rateEntry = rateEntry
 
         measurementFrame = Frame(leftFrame)
@@ -83,7 +87,7 @@ class CalibrationWindow(Toplevel):
         self.curNumTaken = curNumTaken
 
         listFrame = Frame(leftFrame, width=50)
-        listFrame.grid(row=10, rowspan=13, column=0, columnspan=3, padx=6, sticky=N + S + W + E)
+        listFrame.grid(row=10, rowspan=13, column=0, columnspan=3, sticky=N + S + W + E)
         leftFrame.rowconfigure(10, weight=1)
         scrollbar = Scrollbar(listFrame)
         resList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("distance", "mean", "std"))
@@ -121,14 +125,14 @@ class CalibrationWindow(Toplevel):
         self.resList = resList
 
         graph = self.initGraphFrame(mainFrame)
-        graph.pack(side=RIGHT, fill=BOTH, expand=True)
+        graph.pack(side=RIGHT, fill=BOTH, expand=True, padx=8, pady=8)
 
         bottomBtnFrame = Frame(self)
-        bottomBtnFrame.pack(side=BOTTOM, fill=X)
+        bottomBtnFrame.pack(side=BOTTOM, fill=X, padx=8, pady=(0,8))
         exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
-        exitBtn.pack(side=RIGHT, padx=5, pady=5)
+        exitBtn.pack(side=RIGHT)
         exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
-        exportBtn.pack(side=RIGHT)
+        exportBtn.pack(side=RIGHT, padx=(0,5))
 
     class CalibrationResult:
         def __init__(self, dist, inductionList):
@@ -258,7 +262,7 @@ class CalibrationWindow(Toplevel):
         a.set_ylim([0,self.maxY])
         self.graph = a
 
-        wrapper = Frame(fr)
+        wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
         canvas = FigureCanvasTkAgg(f, wrapper)
         canvas.show()
         self.canvas = canvas
