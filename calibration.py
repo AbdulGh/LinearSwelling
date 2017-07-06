@@ -155,7 +155,7 @@ class CalibrationWindow(Toplevel):
                 string += str(i) + " - " + str(self.inductionList[i]) + "\n"
             return string
         
-        def merge(self, merginglist):
+        def merge(self, merginglist): #combine different results in the same object to avoid vertical regression lines
             self.inductionList += merginglist
             self.num = len(self.inductionList)
             self.mean = sum(self.inductionList) / len(self.inductionList)

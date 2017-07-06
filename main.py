@@ -5,6 +5,7 @@ import measure
 from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
+from tkinter import simpledialog
 from tkinter.ttk import *
 
 class MainWindow(Tk):
@@ -33,7 +34,19 @@ class MainWindow(Tk):
                 paramList = []
                 for i in range(settings.numsensors):
                     paramList.append(calibrationWindow.getSettings(i)[:2])
-                experimentWindow = measure.ExperimentWindow(self, paramList)
+
+                string = None
+                while string is None:
+                    string = simpledialog.askstring("Name", "Test name:")
+                    if string is None:
+                        self.deiconify()
+                        return
+                    elif string == "":
+                        messagebox.showerror("Name", "Name cannot be empty")
+                        string = None
+
+
+                experimentWindow = measure.ExperimentWindow(self, paramList, string)
                 self.wait_window(experimentWindow)
 
             else:
@@ -63,7 +76,17 @@ class MainWindow(Tk):
                     messagebox.showerror("Invalid file", "Could not read from this file")
                     self.deiconify()
                     return
-                experimentWindow = measure.ExperimentWindow(self, paramList)
+
+                string = None
+                while string is None:
+                    string = simpledialog.askstring("Name", "Test name:")
+                    if string is None:
+                        self.deiconify()
+                        return
+                    elif string == "":
+                        messagebox.showerror("Name", "Name cannot be empty")
+                        string = None
+                experimentWindow = measure.ExperimentWindow(self, paramList, string)
                 self.wait_window(experimentWindow)
 
         loadCalibration = Button(self, text="Load calibration", command=loadSettingsOption)

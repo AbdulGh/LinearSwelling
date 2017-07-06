@@ -16,20 +16,66 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 class ExperimentWindow(Toplevel):
-    def __init__(self, master, paramList):
+    def __init__(self, master, paramList, runname):
         Toplevel.__init__(self, master)
         self.paramList = paramList
+        self.name = runname
         self.initialReadings = [0 for _ in range(settings.numsensors)]
+        self.sensorNames = ["Sensor " + str(i+1) for i in range(settings.numsensors)]
         self.currentReadings = None
         self.exported = False
         self.title("Swellometer measurement")
         self.resizable(False, False)
+
+        menubar = Menu(self)
+        filemenu = Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Export results", command=self.exportReadings)
+        filemenu.add_command(label="Exit", command=self.fin)
+        menubar.add_cascade(label="File", menu=filemenu)
+        settingsMenu = Menu(menubar, tearoff=0)
+        settingsMenu.add_command(label="Name sensors...", command=self.exportReadings)
+        menubar.add_cascade(label="Settings", menu=settingsMenu)
+        self.config(menu=menubar)
 
         self.style = Style()
         if "clam" in self.style.theme_names():
             self.style.theme_use("clam")
 
         self.initwindow()
+
+    def nameSensors(self):
+        t = Toplevel(self)
+        t.title("Sensors")
+        fr = Frame(t)
+        fr.pack(fill=BOTH, expand=True, padx=8, pady=8)
+        entries = []
+        labels = []
+        for i in range(settings.numsensors):
+            spare = Frame(fr)
+            spare.pack(side=TOP, fill=X, pady=(0,4))
+            e = Entry(spare)
+            e.insert(0, self.sensorNames[i])
+            entries.append(e)
+            e.pack(side=LEFT)
+            l = Label(spare)
+            l.pack(side=LEFT)
+            labels.append(l)
+
+        def updateLabels():
+            for i in range(settings.numsensors):
+                labels[i].config(text=": " + str(tools.getCurrentReading(i)) + " mV")
+            t.after(500, updateLabels)
+
+        updateLabels()
+
+        def updateNames():
+            for i in range(settings.numsensors):
+                self.sensorNames[i] = entries[i].get()
+            self.graph.legend(labels = self.sensorNames)
+
+        Button(fr, text="Save", command=updateNames).pack(side=RIGHT, padx=(8,0))
+        Button(fr, text="Cancel", command=t.destroy).pack(side=RIGHT)
+        t.resizable(False, False)
 
     def initwindow(self):
         mainFrame = Frame(self)
@@ -56,13 +102,15 @@ class ExperimentWindow(Toplevel):
 
         btnFrame = Frame(topFrame)
         btnFrame.pack(side=RIGHT, padx=8, pady=8)
+        Button(btnFrame, text="Name sensors...", command=self.nameSensors).grid(row=0, column=0, padx=2)
         stopBtn = Button(btnFrame, text="Stop", command=self.stopRecording)
-        stopBtn.grid(row=0, column=0, padx=2)
+        stopBtn.grid(row=0, column=1, padx=2)
         stopBtn.config(state=DISABLED)
         self.stopBtn = stopBtn
         startBtn = Button(btnFrame, text="Start", command=self.startRecording)
-        startBtn.grid(row=0, column=1, padx=2)
+        startBtn.grid(row=0, column=2, padx=2)
         self.startBtn = startBtn
+
 
         graph = self.initGraphFrame(mainFrame)
         graph.pack(side=RIGHT, fill=BOTH, padx=8, pady=8)
@@ -99,10 +147,9 @@ class ExperimentWindow(Toplevel):
 
         f = filedialog.asksaveasfile(mode='w')
         if f is not None:
-            print(time.time())
-            f.write("Experiment report " + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nTime(s) - Displacement(mm) - Voltage(mV)\n")
+            f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nTime(s) - Displacement(mm) - Voltage(mV)\n")
             for s in range(len(self.currentReadings)):
-                string = "\n*** Sensor " + str(s) + " ***\n"
+                string = "\n*** " + self.sensorNames[s] + " ***\n"
                 string += "Recieved calibration line: y = " + str(self.paramList[s][0]) + " x + " + str(self.paramList[s][1]) + "\n"
                 for i in range(len(self.currentReadings[s])):
                     string += str(round(self.actualTimes[s][i] * 10, 4)) + " " + str(self.currentReadings[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
@@ -139,7 +186,6 @@ class ExperimentWindow(Toplevel):
                 return
 
         self.exported = False
-
 
         t = tools.getFloatFromEntry(self.timeEntry, mini=0)
         rate = tools.getFloatFromEntry(self.rateEntry, mini=0.01, maxi=120)
@@ -200,15 +246,18 @@ class ExperimentWindow(Toplevel):
         a.set_ylim([0,self.maxY])
         self.plots = []
         for i in range(settings.numsensors):
-            l, = a.plot([])
+            l, = a.plot([], label=self.sensorNames[i])
             self.plots.append(l)
         self.graph = a
+        h, l = a.get_legend_handles_labels()
+        self.legend = a.legend(h, l)
 
         wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
         canvas = FigureCanvasTkAgg(f, wrapper)
         self.canvas = canvas
         canvas.show()
         canvas.get_tk_widget().pack(fill=BOTH, expand=True)
+
         return wrapper
 
     """
@@ -225,5 +274,5 @@ class ExperimentWindow(Toplevel):
 if __name__ == '__main__':
     root = Tk()
     root.withdraw()
-    measure = ExperimentWindow(root, [[1,1],[2,2],[3,4],[2,2]])
+    measure = ExperimentWindow(root, [[1,1],[2,2],[3,4],[2,2]], "tname")
     root.wait_window(measure)

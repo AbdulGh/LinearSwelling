@@ -1,13 +1,11 @@
 import time
 from tkinter import *
 from tkinter.ttk import *
-import os
 
-class RunObject():
+class RunObject(): #todo load sensors into 4 things
     def __init__(self, filename):
         with open(filename, "r") as f:
-            self.name = os.path.splitext(os.path.basename(filename))[0]
-            f.readline()
+            self.name = f.readline()
             self.time = time.localtime(float(f.readline()[:-2]))
             self.rate = f.readline().split()[1]
             f.readline()
@@ -75,6 +73,30 @@ class RunObject():
         Button(frame, text="OK", command=t.destroy).pack(side=RIGHT)
         t.resizable(False, False)
         t.mainloop()
+
+class AnalysisWindow(Tk):
+    def __init__(self):
+        Tk.__init__(self)
+        self.title("Swellometer")
+        self.minsize(200, 200)
+        self.resizable(False, False)
+
+        self.initwindow()
+
+        self.style = Style()
+        if "clam" in self.style.theme_names():
+            self.style.theme_use("clam")
+
+        self.loadedROs = []
+
+        self.mainloop()
+
+    def initwindow(self):
+        listFrame = Frame(self)
+        scrollbar = Scrollbar(listFrame)
+        scrollbar.pack(side=RIGHT, fill=Y)
+        list = Listbox(listFrame, selectmode=EXTENDED, yscrollcommand=scrollbar.set)
+        list.pack(side=LEFT, fill=BOTH, expand=True)
 
 if __name__ == "__main__":
     RunObject("export").infoDialog(None)
