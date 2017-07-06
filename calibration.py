@@ -91,6 +91,7 @@ class CalibrationWindow(Toplevel):
         leftFrame.rowconfigure(10, weight=1)
         scrollbar = Scrollbar(listFrame)
         resList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("distance", "mean", "std"))
+        scrollbar.config(command=resList.yview)
         resList["show"] = "headings"
         resList.heading("distance", text="Distance (mm)")
         resList.column("distance", minwidth=10, width=50)

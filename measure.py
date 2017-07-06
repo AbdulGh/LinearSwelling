@@ -6,10 +6,10 @@ import numpy as np
 import random
 import tools
 import settings
-import datetime
-from time import *
+import time
 
 import matplotlib
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.animation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -85,6 +85,13 @@ class ExperimentWindow(Toplevel):
         self.exportBtn.pack(side=RIGHT, padx=(5,0))
         self.exportBtn.config(state=DISABLED)
 
+        progressFrame = Frame(bottomBtnFrame)
+        self.progressLabel = Label(progressFrame, text="Waiting...", width=10)
+        self.progressLabel.pack(side=LEFT)
+        self.progressBar = Progressbar(progressFrame, orient=HORIZONTAL, length=200, mode='determinate')
+        self.progressBar.pack(side=LEFT, fill=X, expand=True, padx=(8,0))
+        progressFrame.pack(side=LEFT, fill=X, expand=True, padx=8, pady=8)
+
     def exportReadings(self):
         if self.currentReadings is None:
             messagebox.showerror("No readings", "Please take some readings first")
@@ -92,9 +99,10 @@ class ExperimentWindow(Toplevel):
 
         f = filedialog.asksaveasfile(mode='w')
         if f is not None:
-            f.write("Calibration report - " + str(datetime.datetime.now()) + "\nRate - " + str(self.lastrate) + "\nTime(s) - Displacement(mm) - Voltage(mV)\n")
+            print(time.time())
+            f.write("Experiment report " + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nTime(s) - Displacement(mm) - Voltage(mV)\n")
             for s in range(len(self.currentReadings)):
-                string = "\n***Sensor " + str(s) + "***\n"
+                string = "\n*** Sensor " + str(s) + " ***\n"
                 string += "Recieved calibration line: y = " + str(self.paramList[s][0]) + " x + " + str(self.paramList[s][1]) + "\n"
                 for i in range(len(self.currentReadings[s])):
                     string += str(round(self.actualTimes[s][i] * 10, 4)) + " " + str(self.currentReadings[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
@@ -112,8 +120,10 @@ class ExperimentWindow(Toplevel):
         self.startBtn.config(state=NORMAL)
         self.timeEntry.config(state=NORMAL)
         self.rateEntry.config(state=NORMAL)
-
         self.exportBtn.config(state=NORMAL)
+
+        self.progressLabel.config(text="Done.")
+        self.progressBar["value"] = 0
 
     def fin(self):
         if self.currentReadings is not None and not self.exported:
@@ -130,16 +140,18 @@ class ExperimentWindow(Toplevel):
 
         self.exported = False
 
-        time = tools.getFloatFromEntry(self.timeEntry, mini=0)
+
+        t = tools.getFloatFromEntry(self.timeEntry, mini=0)
         rate = tools.getFloatFromEntry(self.rateEntry, mini=0.01, maxi=120)
 
         if (time is None or rate is None):
             return
 
-        totalNo = int(time * rate)
+        totalNo = int(t * rate)
         rate = self.lastrate = 60000/rate
+        self.progressBar.config(maximum=totalNo)
 
-        self.graph.set_xlim([0, time])
+        self.graph.set_xlim([0, t])
 
         self.stopBtn.config(state=NORMAL)
         self.startBtn.config(state=DISABLED)
@@ -149,22 +161,25 @@ class ExperimentWindow(Toplevel):
         self.currentReadings = [[] for _ in range(settings.numsensors)]
         self.currentVoltages = [[] for _ in range(settings.numsensors)]
         self.actualTimes = [[] for _ in range(settings.numsensors)]
-        self.xs = np.linspace(0, time, totalNo)
+        self.xs = np.linspace(0, t, totalNo)
 
-        def takeSingleResult(_): #takes <=3.5ms starting empty w/ random input
-            if len(self.currentReadings[0]) >= totalNo:
+        def takeSingleResult(_): #takes <= 3.5ms starting empty w/ random input
+            prog = len(self.currentReadings[0])
+            if prog >= totalNo:
                 self.stopRecording()
                 return
+            self.progressBar["value"] = prog
+            self.progressLabel.config(text = str(round(prog/totalNo * 100, 3)) + "%")
             for i in range(settings.numsensors):
                 d, v = self.getCurrentDisplacement(i)
                 self.currentReadings[i].append(d)
                 self.currentVoltages[i].append(v)
-                self.actualTimes[i].append(clock() - self.lastStartTime)
+                self.actualTimes[i].append(time.clock() - self.lastStartTime)
                 plot = self.plots[i]
                 plot.set_data(self.xs[:len(self.currentReadings[i])], self.currentReadings[i])
             return self.plots
 
-        self.lastStartTime = clock()
+        self.lastStartTime = time.clock()
         self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=False)
         self.canvas.show()
 
@@ -175,8 +190,6 @@ class ExperimentWindow(Toplevel):
         return [1 + 2 * i + random.uniform(-0.3, 0.3), random.randint(0, 10)] #m * tools.getCurrentReading(i) - self.initialReadings[i]) + b
 
     def initGraphFrame(self, fr):
-        if "dark_background" in plt.style.available:
-            plt.style.use("dark_background")
         f = plt.figure(figsize=(8, 5), dpi=100)
         self.fig = f
         a = f.add_subplot(111)
@@ -211,5 +224,6 @@ class ExperimentWindow(Toplevel):
 
 if __name__ == '__main__':
     root = Tk()
-    measure = ExperimentWindow(None, [[1,1],[2,2],[3,4],[2,2]])
+    root.withdraw()
+    measure = ExperimentWindow(root, [[1,1],[2,2],[3,4],[2,2]])
     root.wait_window(measure)

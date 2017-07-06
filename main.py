@@ -32,7 +32,7 @@ class MainWindow(Tk):
             if calibrationWindow.done:
                 paramList = []
                 for i in range(settings.numsensors):
-                    paramList.append(calibrationWindow.getSettings(i))
+                    paramList.append(calibrationWindow.getSettings(i)[:2])
                 experimentWindow = measure.ExperimentWindow(self, paramList)
                 self.wait_window(experimentWindow)
 
@@ -47,7 +47,7 @@ class MainWindow(Tk):
 
         def loadSettingsOption():
             f = filedialog.askopenfilename()
-            if f is not None:
+            if f:
                 self.withdraw()
                 paramList = []
                 try:
