@@ -42,7 +42,7 @@ class MainWindow(Tk):
                         self.deiconify()
                         return
                     elif string == "":
-                        messagebox.showerror("Name", "Name cannot be empty")
+                        messagebox.showerror("Name", "Name cannot be empty.")
                         string = None
 
 
@@ -73,7 +73,7 @@ class MainWindow(Tk):
                         paramList.append([m,b])
                     f.close()
                 except:
-                    messagebox.showerror("Invalid file", "Could not read from this file")
+                    messagebox.showerror("Invalid file", "Could not read from this file.")
                     self.deiconify()
                     return
 
@@ -84,7 +84,7 @@ class MainWindow(Tk):
                         self.deiconify()
                         return
                     elif string == "":
-                        messagebox.showerror("Name", "Name cannot be empty")
+                        messagebox.showerror("Name", "Name cannot be empt.y")
                         string = None
                 experimentWindow = measure.ExperimentWindow(self, paramList, string)
                 self.wait_window(experimentWindow)

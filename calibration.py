@@ -102,25 +102,10 @@ class CalibrationWindow(Toplevel):
 
         self.sensorTreeviewIDs = []
         for i in range(settings.numsensors):
-            id = resList.insert("", "end", i, values=(">Sensor" + str(i + 1)))
+            id = resList.insert("", "end", i, values=(">Sensor" + str(i + 1)), open=True)
             self.sensorTreeviewIDs.append(id)
-            resList.item(id, open=True)
         resList.pack(side=LEFT, fill=BOTH, expand=True)
         scrollbar.config(command=resList.yview)
-
-        def deleteSelected():
-            nonlocal resList
-            items = map(int, resList.curselection())
-            print(items)
-
-        menu = Menu(resList, tearoff=0)
-        menu.add_command(label="Delete", command=deleteSelected)
-
-        def popup(event):
-            print("hi")
-            menu.post(event.x_root, event.y_root)
-
-        listFrame.bind("<Button-3>", popup)
 
         scrollbar.pack(side=RIGHT, fill=Y)
         self.resList = resList

@@ -69,9 +69,19 @@ class ExperimentWindow(Toplevel):
         updateLabels()
 
         def updateNames():
-            for i in range(settings.numsensors):
-                self.sensorNames[i] = entries[i].get()
+            values = [entry.get() for entry in entries]
+            #check sensors have unique names
+            #could be done w/ a map or sorting but we have like 4 sensors
+            for i in range(len(values)):
+                for j in range(i+1, len(values)):
+                    if values[i] == values[j]:
+                        messagebox.showerror("Error", "Sensor names must have distinct names")
+                        return
+
+            self.sensorNames = values
             self.graph.legend(labels = self.sensorNames)
+            self.canvas.show()
+            t.destroy()
 
         Button(fr, text="Save", command=updateNames).pack(side=RIGHT, padx=(8,0))
         Button(fr, text="Cancel", command=t.destroy).pack(side=RIGHT)
@@ -142,7 +152,7 @@ class ExperimentWindow(Toplevel):
 
     def exportReadings(self):
         if self.currentReadings is None:
-            messagebox.showerror("No readings", "Please take some readings first")
+            messagebox.showerror("No readings", "Please take some readings first.")
             return
 
         f = filedialog.asksaveasfile(mode='w')
@@ -250,7 +260,6 @@ class ExperimentWindow(Toplevel):
             self.plots.append(l)
         self.graph = a
         h, l = a.get_legend_handles_labels()
-        self.legend = a.legend(h, l)
 
         wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
         canvas = FigureCanvasTkAgg(f, wrapper)
