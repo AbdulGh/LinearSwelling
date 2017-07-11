@@ -17,9 +17,10 @@ class MainWindow(Tk):
 
         self.initwindow()
 
+        """
         self.style = Style()
         if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")
+            self.style.theme_use("clam")"""
 
         self.mainloop()
 
@@ -35,18 +36,7 @@ class MainWindow(Tk):
                 for i in range(settings.numsensors):
                     paramList.append(calibrationWindow.getSettings(i)[:2])
 
-                string = None
-                while string is None:
-                    string = simpledialog.askstring("Name", "Test name:")
-                    if string is None:
-                        self.deiconify()
-                        return
-                    elif string == "":
-                        messagebox.showerror("Name", "Name cannot be empty.")
-                        string = None
-
-
-                experimentWindow = measure.ExperimentWindow(self, paramList, string)
+                experimentWindow = measure.ExperimentWindow(self, paramList)
                 self.wait_window(experimentWindow)
 
             else:

@@ -27,9 +27,11 @@ class CalibrationWindow(Toplevel):
         self.results = [{} for _ in range(settings.numsensors)]
         self.done = False
 
+        """
         self.style = Style()
         if "clam" in self.style.theme_names():
             self.style.theme_use("clam")
+        """
 
         if master is not None:
             self.geometry("+%d+%d" % (master.winfo_rootx() - 300, master.winfo_rooty() - 200))

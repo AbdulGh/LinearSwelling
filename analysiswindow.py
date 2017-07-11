@@ -1,5 +1,6 @@
 import time
 import os
+import analysisgraph
 from tkinter import *
 from tkinter import filedialog
 from tkinter import messagebox
@@ -9,24 +10,30 @@ from tkinter.ttk import *
 class AnalysisWindow(Tk):
     def __init__(self):
         Tk.__init__(self)
-        self.title("Swellometer")
-        self.loadedRuns = []
+        self.title("Swellometer Analysis")
+        self.loadedRuns = {} #(runname, runtime) -> (listID, runObject)
+        self.graphmode = StringVar(self)
+        self.graphmode.set("Displacement")
         self.initwindow()
         self.resizable(False, False)
 
+        """
         self.style = Style()
         if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")
+            self.style.theme_use("clam")"""
 
     def initwindow(self):
         mainFrame = Frame(self)
         mainFrame.pack(fill=BOTH, padx=8, pady=8)
 
-        currentLoadedFrame = Frame(mainFrame)
-        currentLoadedFrame.pack(side=LEFT)
+        self.graph = analysisgraph.AnalysisGraph(mainFrame)
+        self.graph.pack(side=RIGHT, fill=BOTH, expand=True)
 
-        listFrame = Frame(currentLoadedFrame, width=300)
-        listFrame.pack(side=TOP)
+        leftFrame = Frame(mainFrame)
+        leftFrame.pack(side=LEFT, fill=Y, expand=True, padx=(0, 8))
+
+        listFrame = Frame(leftFrame, width=300)
+        listFrame.pack(side=TOP, fill=Y, expand=True)
         scrollbar = Scrollbar(listFrame)
         importList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("name", "points"))
         scrollbar.config(command=importList.yview)
@@ -70,7 +77,6 @@ class AnalysisWindow(Tk):
                 self.master.deleteObject(self.id)
         self.importPopup = ImportListPopup(self)
 
-
         def importListRightClick(event):
             iid = importList.identify_row(event.y)
             if iid:
@@ -86,29 +92,46 @@ class AnalysisWindow(Tk):
         importList.tag_configure("run", font=runFont)
         self.importList = importList
 
-        Button(currentLoadedFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
+        Button(leftFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
+
+        OptionMenu(leftFrame, self.graphmode, "Displacement", "Displacement", "Voltages", "Total Swell", command=self.changeGraphMode).pack(side=LEFT, pady=(4,0))
 
         self.mainloop()
 
-    def deleteObject(self, id):
-        pointed = self.indexPointers[id]
+    def changeGraphMode(self, _):
+        selection = self.graphmode.get()
+        if selection == "None":
+            self.graph.clear()
+        else:
+            runs = [run for _, (_, run) in self.loadedRuns.items()]
+            if selection == "Displacement":
+                self.graph.plotDistances(runs)
+            elif selection == "Voltages":
+                self.graph.plotVoltages(runs)
+            elif selection == "Total Swell":
+                self.graph.plotTotalSwells(runs)
+
+    def deleteObject(self, iid, warn=True):
+        pointed = self.indexPointers[iid]
         if "runname" in pointed:
-            res = messagebox.askyesno("Delete run", "Are you sure you want to delete this run and all of its data?")
-            if res == "no":
-                return
-            else:
-                for i in self.importList.get_children(id):
-                    del self.indexPointers[i]
-                    self.importList.delete(i)
-        self.importList.delete(id)
-        del self.indexPointers[id]
+            if warn:
+                res = messagebox.askyesno("Delete run", "Are you sure you want to delete this run and all of its data?")
+                if res == "no":
+                    return
+            for i in self.importList.get_children(iid):
+                del self.indexPointers[i]
+                self.importList.delete(i)
+            del self.loadedRuns[(pointed["runname"], pointed["timeofrun"])]
+        self.importList.delete(iid)
+        del self.indexPointers[iid]
 
     def runInfoDialog(self, run):
         t = Toplevel(self)
 
-        t.style = Style()
-        if "clam" in t.style.theme_names():
-            t.style.theme_use("clam")
+        """
+        self.style = Style()
+        if "clam" in self.style.theme_names():
+            self.style.theme_use("clam")"""
 
         frame = Frame(t)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
@@ -134,14 +157,16 @@ class AnalysisWindow(Tk):
     def sensorInfoDialog(self, sensor):
         t = Toplevel(self)
 
-        t.style = Style()
-        if "clam" in t.style.theme_names():
-            t.style.theme_use("clam")
+        """
+        self.style = Style()
+        if "clam" in self.style.theme_names():
+            self.style.theme_use("clam")"""
 
         frame = Frame(t)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + sensor["name"]).pack(side=TOP)
         Label(frame, text="# of readings: " + str(len(sensor["times"]))).pack(side=TOP)
+        Label(frame, text="Initial voltage (mV): " + str(sensor["initial"]))
 
         listFrame = Frame(frame, width=300)
         listFrame.pack(side=TOP)
@@ -194,10 +219,20 @@ class AnalysisWindow(Tk):
         for filename in filenames:
             try:
                 with open(filename, "r") as f:
-                    runname = f.readline()
+                    runname = f.readline()[:-1]
+
                     f.readline() #throw away human-readable date
-                    timeofrun = time.localtime(float(f.readline()[:-2]))
-                    rate = f.readline().split()[1]
+                    timeofrun = time.localtime(float(f.readline()[:-1]))
+
+                    if (runname, timeofrun) in self.loadedRuns:
+                        res = messagebox.askyesno("Reload run", "Do you want to reload '" + runname + "'?")
+                        if res == "no":
+                            continue
+                        else:
+                            iid, _ = self.loadedRuns[(runname, timeofrun)]
+                            self.deleteObject(iid, warn=False)
+
+                    rate = f.readline()[:-1].split()[1]
                     f.readline()
                     f.readline()
                     names = []
@@ -210,9 +245,10 @@ class AnalysisWindow(Tk):
                         sensor = {}
                         name = " ".join(line[1:-1])
                         names.append(name)
+                        sensor["name"] = name
                         calib = f.readline().split()
                         sensor["params"] = [float(calib[5]), float(calib[8])]
-                        sensor["name"] = name
+                        sensor["initial"] = float(f.readline().split()[2])
                         sensor["times"] = []
                         sensor["distances"] = []
                         sensor["voltages"] = []
@@ -234,15 +270,17 @@ class AnalysisWindow(Tk):
                     toimport = self.chooseSensorsDialogue(names, filename)
                     sensors = {names[i]:sensors[i] for i in range(len(names)) if toimport[i]}
                     runs.append({"runname": runname, "timeofrun": timeofrun, "rate":rate, "sensors": sensors})
-            except:
+            except Exception as e:
                 messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
+
         for run in runs:
-            if run not in self.loadedRuns: #todo deal w/ loading the same run multiple times w/ different sensors
-                rootid = self.importList.insert("", "end", values=(run["runname"], ""), open=True, tags=("run"))
-                self.indexPointers[rootid] = run
-                for name, sensor in run["sensors"].items():
-                    self.indexPointers[self.importList.insert(rootid, "end", values=(name, str(len(sensor["times"]))))] = sensor
-                self.loadedRuns.append(run)
+            rootid = self.importList.insert("", "end", values=(str(len(self.loadedRuns) + 1) + " - " + run["runname"], ""), open=True, tags=("run"))
+            self.loadedRuns[(run["runname"], run["timeofrun"])] = [rootid, run]
+            self.indexPointers[rootid] = run
+            for name, sensor in run["sensors"].items():
+                self.indexPointers[self.importList.insert(rootid, "end", values=(name, str(len(sensor["times"]))))] = sensor
+
+        self.changeGraphMode(None)
 
 def test():
     a = AnalysisWindow()

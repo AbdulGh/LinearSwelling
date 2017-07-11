@@ -1,6 +1,7 @@
 from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
+from tkinter import simpledialog
 from tkinter.ttk import *
 import numpy as np
 import random
@@ -16,32 +17,51 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 class ExperimentWindow(Toplevel):
-    def __init__(self, master, paramList, runname):
+    def __init__(self, master, paramList):
         Toplevel.__init__(self, master)
+        self.name = time.ctime()
         self.paramList = paramList
-        self.name = runname
         self.initialReadings = [0 for _ in range(settings.numsensors)]
         self.sensorNames = ["Sensor " + str(i+1) for i in range(settings.numsensors)]
         self.currentReadings = None
         self.exported = False
+        self.animation = None
         self.title("Swellometer measurement")
         self.resizable(False, False)
 
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Rename test", command=self.getName)
         filemenu.add_command(label="Export results", command=self.exportReadings)
         filemenu.add_command(label="Exit", command=self.fin)
         menubar.add_cascade(label="File", menu=filemenu)
         settingsMenu = Menu(menubar, tearoff=0)
-        settingsMenu.add_command(label="Name sensors...", command=self.exportReadings)
+        settingsMenu.add_command(label="Name sensors", command=self.nameSensors)
         menubar.add_cascade(label="Settings", menu=settingsMenu)
         self.config(menu=menubar)
 
+        self.protocol('WM_DELETE_WINDOW', self.fin)
+
+        """
         self.style = Style()
         if "clam" in self.style.theme_names():
             self.style.theme_use("clam")
+        """
 
         self.initwindow()
+        self.getName()
+
+    def getName(self):
+        while True:
+            self.name = simpledialog.askstring("Name", "Test name:", initialvalue=self.name)
+            if self.name is None:
+                self.name = time.ctime()
+
+            if self.name == "":
+                messagebox.showerror("Name", "Name cannot be empty.")
+                self.name = None
+            else:
+                break
 
     def nameSensors(self):
         t = Toplevel(self)
@@ -75,7 +95,7 @@ class ExperimentWindow(Toplevel):
             for i in range(len(values)):
                 for j in range(i+1, len(values)):
                     if values[i] == values[j]:
-                        messagebox.showerror("Error", "Sensor names must have distinct names")
+                        messagebox.showerror("Error", "Sensor names must have distinct names.")
                         return
 
             self.sensorNames = values
@@ -112,7 +132,7 @@ class ExperimentWindow(Toplevel):
 
         btnFrame = Frame(topFrame)
         btnFrame.pack(side=RIGHT, padx=8, pady=8)
-        Button(btnFrame, text="Name sensors...", command=self.nameSensors).grid(row=0, column=0, padx=2)
+        #Button(btnFrame, text="Name sensors...", command=self.nameSensors).grid(row=0, column=0, padx=2)
         stopBtn = Button(btnFrame, text="Stop", command=self.stopRecording)
         stopBtn.grid(row=0, column=1, padx=2)
         stopBtn.config(state=DISABLED)
@@ -120,7 +140,6 @@ class ExperimentWindow(Toplevel):
         startBtn = Button(btnFrame, text="Start", command=self.startRecording)
         startBtn.grid(row=0, column=2, padx=2)
         self.startBtn = startBtn
-
 
         graph = self.initGraphFrame(mainFrame)
         graph.pack(side=RIGHT, fill=BOTH, padx=8, pady=8)
@@ -139,9 +158,9 @@ class ExperimentWindow(Toplevel):
         bottomBtnFrame = Frame(self)
         bottomBtnFrame.pack(side=BOTTOM, fill=X)
         Button(bottomBtnFrame, text="Done", command=self.fin).pack(side=RIGHT, padx=8, pady=8)
-        self.exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
-        self.exportBtn.pack(side=RIGHT, padx=(5,0))
-        self.exportBtn.config(state=DISABLED)
+        #self.exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
+        #self.exportBtn.pack(side=RIGHT, padx=(5,0))
+        #self.exportBtn.config(state=DISABLED)
 
         progressFrame = Frame(bottomBtnFrame)
         self.progressLabel = Label(progressFrame, text="Waiting...", width=10)
@@ -161,30 +180,38 @@ class ExperimentWindow(Toplevel):
             for s in range(len(self.currentReadings)):
                 string = "\n*** " + self.sensorNames[s] + " ***\n"
                 string += "Recieved calibration line: y = " + str(self.paramList[s][0]) + " x + " + str(self.paramList[s][1]) + "\n"
+                string += "Initial reading: " + str(self.initialReadings[s]) + "\n"
                 for i in range(len(self.currentReadings[s])):
-                    string += str(round(self.actualTimes[s][i] * 10, 4)) + " " + str(self.currentReadings[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
+                    string += str(self.actualTimes[s][i] * 1/60) + " " + str(self.currentReadings[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
                 f.write(string)
             f.close()
             self.exported = True
 
     def stopRecording(self):
         if self.animation is None:
-            raise "check"
+            return
 
         self.animation.event_source.stop()
+        self.animation = None
 
         self.stopBtn.config(state=DISABLED)
         self.startBtn.config(state=NORMAL)
         self.timeEntry.config(state=NORMAL)
         self.rateEntry.config(state=NORMAL)
-        self.exportBtn.config(state=NORMAL)
+        #self.exportBtn.config(state=NORMAL)
 
         self.progressLabel.config(text="Done.")
         self.progressBar["value"] = 0
 
     def fin(self):
+        if self.animation: #still recording
+            result = messagebox.askquestion("Test in progress", "Stop testing?", icon='warning')
+            if result == "no":
+                return
+            self.stopRecording()
+
         if self.currentReadings is not None and not self.exported:
-            result = messagebox.askquestion("Results not exported", "Save results first?", icon='warning')
+            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?", icon='warning')
             if result == "yes":
                 self.exportReadings()
         self.destroy()
@@ -260,6 +287,7 @@ class ExperimentWindow(Toplevel):
             self.plots.append(l)
         self.graph = a
         h, l = a.get_legend_handles_labels()
+        a.legend(h, l)
 
         wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
         canvas = FigureCanvasTkAgg(f, wrapper)
@@ -283,5 +311,5 @@ class ExperimentWindow(Toplevel):
 if __name__ == '__main__':
     root = Tk()
     root.withdraw()
-    measure = ExperimentWindow(root, [[1,1],[2,2],[3,4],[2,2]], "tname")
+    measure = ExperimentWindow(root, [[1,1],[2,2],[3,4],[2,2]])
     root.wait_window(measure)
