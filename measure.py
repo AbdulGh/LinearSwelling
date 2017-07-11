@@ -21,9 +21,8 @@ class ExperimentWindow(Toplevel):
         Toplevel.__init__(self, master)
         self.name = time.ctime()
         self.paramList = paramList
-        self.initialReadings = [0 for _ in range(settings.numsensors)]
         self.sensorNames = ["Sensor " + str(i+1) for i in range(settings.numsensors)]
-        self.currentReadings = None
+        self.currentPercentageSwelling = None
         self.exported = False
         self.animation = None
         self.title("Swellometer measurement")
@@ -170,19 +169,19 @@ class ExperimentWindow(Toplevel):
         progressFrame.pack(side=LEFT, fill=X, expand=True, padx=8, pady=8)
 
     def exportReadings(self):
-        if self.currentReadings is None:
-            messagebox.showerror("No readings", "Please take some readings first.")
+        if self.currentPercentageSwelling is None:
+            messagebox.showerror("No readings", "Please take some readings first.", parent=self)
             return
 
-        f = filedialog.asksaveasfile(mode='w')
+        f = filedialog.asksaveasfile(mode='w', parent=self)
         if f is not None:
-            f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nTime(s) - Displacement(mm) - Voltage(mV)\n")
-            for s in range(len(self.currentReadings)):
+            f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nTime(m) - Displacement(%) - Voltage(mV)\n")
+            for s in range(len(self.currentPercentageSwelling)):
                 string = "\n*** " + self.sensorNames[s] + " ***\n"
                 string += "Recieved calibration line: y = " + str(self.paramList[s][0]) + " x + " + str(self.paramList[s][1]) + "\n"
-                string += "Initial reading: " + str(self.initialReadings[s]) + "\n"
-                for i in range(len(self.currentReadings[s])):
-                    string += str(self.actualTimes[s][i] * 1/60) + " " + str(self.currentReadings[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
+                string += "Initial reading: " + str(self.initialReadings[s][0]) + " " + str(self.initialReadings[s][1]) + "\n"
+                for i in range(len(self.currentPercentageSwelling[s])):
+                    string += str(self.actualTimes[s][i]) + " " + str(self.currentPercentageSwelling[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
                 f.write(string)
             f.close()
             self.exported = True
@@ -205,20 +204,20 @@ class ExperimentWindow(Toplevel):
 
     def fin(self):
         if self.animation: #still recording
-            result = messagebox.askquestion("Test in progress", "Stop testing?", icon='warning')
+            result = messagebox.askquestion("Test in progress", "Stop testing?", icon='warning', parent=self)
             if result == "no":
                 return
             self.stopRecording()
 
-        if self.currentReadings is not None and not self.exported:
-            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?", icon='warning')
+        if self.currentPercentageSwelling is not None and not self.exported:
+            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?", icon='warning', parent=self) #todo yesnocancel
             if result == "yes":
                 self.exportReadings()
         self.destroy()
 
     def startRecording(self):
-        if self.currentReadings is not None and not self.exported:
-            result = messagebox.askquestion("Results not exported", "Discard current readings?", icon='warning')
+        if self.currentPercentageSwelling is not None and not self.exported:
+            result = messagebox.askquestion("Results not exported", "Discard current readings?", icon='warning', parent=self)
             if result == "no":
                 return
 
@@ -230,7 +229,7 @@ class ExperimentWindow(Toplevel):
         if (time is None or rate is None):
             return
 
-        totalNo = int(t * rate)
+        totalNo = int(t * rate) + 1
         rate = self.lastrate = 60000/rate
         self.progressBar.config(maximum=totalNo)
 
@@ -241,13 +240,14 @@ class ExperimentWindow(Toplevel):
         self.timeEntry.config(state=DISABLED)
         self.rateEntry.config(state=DISABLED)
 
-        self.currentReadings = [[] for _ in range(settings.numsensors)]
+        self.initialReadings = [self.getCurrentDisplacement(i) for i in range(settings.numsensors)]
+        multipliers = [50 for i in range(settings.numsensors)] #[100/self.initialReadings(i)[0] for i in range(settings.numsensors)] #pre-compute conversion constant into percentage swell
+        self.currentPercentageSwelling = [[] for _ in range(settings.numsensors)]
         self.currentVoltages = [[] for _ in range(settings.numsensors)]
         self.actualTimes = [[] for _ in range(settings.numsensors)]
-        self.xs = np.linspace(0, t, totalNo)
 
         def takeSingleResult(_): #takes <= 3.5ms starting empty w/ random input
-            prog = len(self.currentReadings[0])
+            prog = len(self.currentPercentageSwelling[0])
             if prog >= totalNo:
                 self.stopRecording()
                 return
@@ -255,39 +255,42 @@ class ExperimentWindow(Toplevel):
             self.progressLabel.config(text = str(round(prog/totalNo * 100, 3)) + "%")
             for i in range(settings.numsensors):
                 d, v = self.getCurrentDisplacement(i)
-                self.currentReadings[i].append(d)
+                percentage = d * multipliers[i]
+                if (percentage > self.maxY):
+                    self.maxY = percentage + 10
+                    self.graph.set_ylim([100, self.maxY])
+                self.currentPercentageSwelling[i].append(d * multipliers[i])
                 self.currentVoltages[i].append(v)
-                self.actualTimes[i].append(time.clock() - self.lastStartTime)
+                self.actualTimes[i].append((time.time() - self.lastStartTime) / 60)
+                #print(d * multipliers[i], self.actualTimes[i])
                 plot = self.plots[i]
-                plot.set_data(self.xs[:len(self.currentReadings[i])], self.currentReadings[i])
+                plot.set_data(self.actualTimes[i], self.currentPercentageSwelling[i])
             return self.plots
 
-        self.lastStartTime = time.clock()
+        self.lastStartTime = time.time()
         self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=False)
         self.canvas.show()
 
     def getCurrentDisplacement(self, i):
-        if i > len(self.initialReadings) or self.initialReadings[i] is None:
-            raise "Displacement asked for before recording started"
-        m,b = self.paramList[i] #todo
-        return [1 + 2 * i + random.uniform(-0.3, 0.3), random.randint(0, 10)] #m * tools.getCurrentReading(i) - self.initialReadings[i]) + b
+        # m,b = self.paramList[i]
+        return [4 + i + random.uniform(-0.3, 0.3), random.randint(0, 10)] #m * tools.getCurrentReading(i) + b
 
     def initGraphFrame(self, fr):
         f = plt.figure(figsize=(8, 5), dpi=100)
         self.fig = f
         a = f.add_subplot(111)
         a.set_xlabel("Time (m)")
-        a.set_ylabel("Displacement (mm)")
-        self.maxY = 10
+        a.set_ylabel("Relative swell (%)")
+        self.maxY = 300
         a.set_xlim([0,180])
-        a.set_ylim([0,self.maxY])
+        a.set_ylim([100,self.maxY])
         self.plots = []
         for i in range(settings.numsensors):
             l, = a.plot([], label=self.sensorNames[i])
             self.plots.append(l)
-        self.graph = a
         h, l = a.get_legend_handles_labels()
         a.legend(h, l)
+        self.graph = a
 
         wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
         canvas = FigureCanvasTkAgg(f, wrapper)
@@ -302,7 +305,7 @@ class ExperimentWindow(Toplevel):
         update = int(1000 / tools.getFloatFromEntry(self.rateEntry, mini=0))
         def readingUpdate():
             i = tools.getCurrentReading()
-            label.config(text="Current displacement(mm): " + str(i))
+            label.config(text="Current displacement(%): " + str(i))
             self.readoutAfterID = label.after(update, readingUpdate)
         if self.readoutAfterID is not None:
             label.after_cancel(self.readoutAfterID)

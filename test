@@ -1,8 +1,69 @@
-0.5625
-1.6875
--0.0625
-6.0625
-1.0625
-1.1875
-0.1875
-4.3125
+Calibration report - 2017-07-11 06:26:24.613949
+
+***Sensor 1***
+Regression line: y = 1.0x + 1.0
+r-value: 1.0
+Total # of distinct distances: 2
+---Reading 0---
+Distance: 1.0mm
+Calculated mean: 2.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 2
+---Reading 1---
+Distance: 3.0mm
+Calculated mean: 4.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 4
+
+***Sensor 2***
+Regression line: y = -5.0x + 20.0
+r-value: -1.0
+Total # of distinct distances: 2
+---Reading 0---
+Distance: 2.0mm
+Calculated mean: 10.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 10
+---Reading 1---
+Distance: 3.0mm
+Calculated mean: 5.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 5
+
+***Sensor 3***
+Regression line: y = -5.0x + 22.0
+r-value: -1.0
+Total # of distinct distances: 2
+---Reading 0---
+Distance: 3.0mm
+Calculated mean: 7.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 7
+---Reading 1---
+Distance: 4.0mm
+Calculated mean: 2.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 2
+
+***Sensor 4***
+Regression line: y = 10.0x + -30.0
+r-value: 1.0
+Total # of distinct distances: 2
+---Reading 0---
+Distance: 4.0mm
+Calculated mean: 10.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 10
+---Reading 1---
+Distance: 3.0mm
+Calculated mean: 0.0	Calculated SD: 0.0
+Num points: 1
+DAQ inputs:
+0 - 0

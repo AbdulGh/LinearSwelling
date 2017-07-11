@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
 from tkinter.ttk import *
+from tkinter import font
 import scipy.stats
 import tools
 import matplotlib
@@ -102,9 +103,12 @@ class CalibrationWindow(Toplevel):
         resList.heading("std", text="Std.Dev. (mV)")
         resList.column("std", minwidth=10, width=50)
 
+        titleFont = font.Font(family='Helvetica', size=10, weight='bold')
+        resList.tag_configure("title", font=titleFont)
+
         self.sensorTreeviewIDs = []
         for i in range(settings.numsensors):
-            id = resList.insert("", "end", i, values=(">Sensor" + str(i + 1)), open=True)
+            id = resList.insert("", "end", i, values=("Sensor" + str(i + 1)), open=True, tags=("title",))
             self.sensorTreeviewIDs.append(id)
         resList.pack(side=LEFT, fill=BOTH, expand=True)
         scrollbar.config(command=resList.yview)
@@ -243,7 +247,7 @@ class CalibrationWindow(Toplevel):
     def initGraphFrame(self, fr):
         f = Figure(figsize=(8, 5), dpi=100)
         a = f.add_subplot(111)
-        a.set_xlabel("Distance (mm)")
+        a.set_xlabel("Distance (%)")
         a.set_ylabel("Inductance (mV)")
         self.maxX = self.maxY = 10
         a.set_xlim([0,self.maxX])
@@ -280,7 +284,7 @@ class CalibrationWindow(Toplevel):
                 m, b, r_value, _, _ = scipy.stats.linregress(xs, ys)
                 self.graph.plot([0, self.maxX], [b, m * self.maxX + b], '-', color=self.plotcolours[s])
 
-        self.graph.set_xlabel("Distance (mm)")
+        self.graph.set_xlabel("Distance (%)")
         self.graph.set_ylabel("Inductance (mV)")
 
         h,l = self.graph.get_legend_handles_labels()
@@ -296,12 +300,12 @@ class CalibrationWindow(Toplevel):
                 break
 
         if bad:
-            result = messagebox.askquestion("Not enough points", "Cancel calibration?", icon='warning')
+            result = messagebox.askquestion("Not enough points", "Cancel calibration?", icon='warning', parent=self)
             if result == "yes":
                 self.destroy()
         else:
             while not self.done:
-                result = messagebox.askquestion("Save", "Save settings?")
+                result = messagebox.askquestion("Save", "Save settings?", parent=self)
                 if result == "yes":
                     f = filedialog.asksaveasfile(mode='w')
                     if f is not None:

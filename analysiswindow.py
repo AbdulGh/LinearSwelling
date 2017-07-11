@@ -94,17 +94,18 @@ class AnalysisWindow(Tk):
 
         Button(leftFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
 
-        OptionMenu(leftFrame, self.graphmode, "Displacement", "Displacement", "Voltages", "Total Swell", command=self.changeGraphMode).pack(side=LEFT, pady=(4,0))
+        OptionMenu(leftFrame, self.graphmode, "Percentage Displacement", "Percentage Displacement", "Voltages", "Total Swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
+        self.setGraphMode()
 
         self.mainloop()
 
-    def changeGraphMode(self, _):
+    def setGraphMode(self, _=None): #throw away event parameter from optionmenu callback
         selection = self.graphmode.get()
         if selection == "None":
             self.graph.clear()
         else:
             runs = [run for _, (_, run) in self.loadedRuns.items()]
-            if selection == "Displacement":
+            if selection == "Percentage Displacement":
                 self.graph.plotDistances(runs)
             elif selection == "Voltages":
                 self.graph.plotVoltages(runs)
@@ -115,15 +116,19 @@ class AnalysisWindow(Tk):
         pointed = self.indexPointers[iid]
         if "runname" in pointed:
             if warn:
-                res = messagebox.askyesno("Delete run", "Are you sure you want to delete this run and all of its data?")
+                res = messagebox.askyesno("Delete run", "Are you sure you want to delete this run and all of its data?", parent=self)
                 if res == "no":
                     return
             for i in self.importList.get_children(iid):
                 del self.indexPointers[i]
                 self.importList.delete(i)
             del self.loadedRuns[(pointed["runname"], pointed["timeofrun"])]
+        else:
+            parentRun = self.indexPointers[self.importList.parent(iid)]
+            del parentRun["sensors"][pointed["name"]]
         self.importList.delete(iid)
         del self.indexPointers[iid]
+        self.setGraphMode()
 
     def runInfoDialog(self, run):
         t = Toplevel(self)
@@ -174,15 +179,15 @@ class AnalysisWindow(Tk):
         resList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("time", "distance", "voltage"))
         scrollbar.config(command=resList.yview)
         resList["show"] = "headings"
-        resList.heading("time", text="Time (s)")
+        resList.heading("time", text="Time (m)")
         resList.column("time", minwidth=10, width=100)
-        resList.heading("distance", text="Distance (mm)")
+        resList.heading("distance", text="Displacement (%)")
         resList.column("distance", minwidth=10, width=100)
         resList.heading("voltage", text="Voltage (mV)")
         resList.column("voltage", minwidth=10, width=100)
 
         for i in range(len(sensor["times"])):
-            resList.insert("", "end", i, values=(sensor["times"][i], sensor["distances"][i], sensor["voltages"][i]))
+            resList.insert("", "end", i, values=(sensor["times"][i], sensor["pdisplacements"][i], sensor["voltages"][i]))
 
         resList.pack(side=LEFT, fill=BOTH, expand=True, pady=4)
         scrollbar.config(command=resList.yview)
@@ -225,7 +230,7 @@ class AnalysisWindow(Tk):
                     timeofrun = time.localtime(float(f.readline()[:-1]))
 
                     if (runname, timeofrun) in self.loadedRuns:
-                        res = messagebox.askyesno("Reload run", "Do you want to reload '" + runname + "'?")
+                        res = messagebox.askyesno("Reload run", "Do you want to reload '" + runname + "'?", parent=self)
                         if res == "no":
                             continue
                         else:
@@ -250,7 +255,7 @@ class AnalysisWindow(Tk):
                         sensor["params"] = [float(calib[5]), float(calib[8])]
                         sensor["initial"] = float(f.readline().split()[2])
                         sensor["times"] = []
-                        sensor["distances"] = []
+                        sensor["pdisplacements"] = []
                         sensor["voltages"] = []
                         line = f.readline()
                         while line != "" and line != "\n":
@@ -258,7 +263,7 @@ class AnalysisWindow(Tk):
                             if len(ar) != 3:
                                 raise IOError("Invalid file")
                             sensor["times"].append(float(ar[0]))
-                            sensor["distances"].append(float(ar[1]))
+                            sensor["pdisplacements"].append(float(ar[1]))
                             sensor["voltages"].append(float(ar[2]))
                             line = f.readline()
                         sensors.append(sensor)
@@ -280,7 +285,7 @@ class AnalysisWindow(Tk):
             for name, sensor in run["sensors"].items():
                 self.indexPointers[self.importList.insert(rootid, "end", values=(name, str(len(sensor["times"]))))] = sensor
 
-        self.changeGraphMode(None)
+        self.setGraphMode()
 
 def test():
     a = AnalysisWindow()
