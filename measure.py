@@ -14,11 +14,20 @@ import matplotlib.animation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class ExperimentWindow(Toplevel):
-    def __init__(self, master, paramList):
+    def __init__(self, master, sensorsettings):
         Toplevel.__init__(self, master)
-        self.name = time.ctime()
-        self.paramList = paramList
-        self.sensorNames = ["Sensor " + str(i+1) for i in range(settings.numsensors)]
+        self.paramList = []
+        self.sensors = []
+        for triple in sensorsettings:
+            try:
+                if len(triple) != 3:
+                    raise ValueError
+                self.sensors.append(int(triple[0]))
+                self.paramList.append(triple[1:])
+            except:
+                raise ValueError("Bad input")
+        self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
+
         self.currentPercentageSwelling = None
         self.exported = False
         self.animation = None
@@ -45,7 +54,7 @@ class ExperimentWindow(Toplevel):
         if "clam" in self.style.theme_names():
             self.style.theme_use("clam")
         """
-
+        self.name = time.ctime()
         self.initwindow()
         self.getName()
 
@@ -71,7 +80,7 @@ class ExperimentWindow(Toplevel):
         fr.pack(fill=BOTH, expand=True, padx=8, pady=8)
         entries = []
         labels = []
-        for i in range(settings.numsensors):
+        for i in range(len(self.sensors)):
             spare = Frame(fr)
             spare.pack(side=TOP, fill=X, pady=(0,4))
             e = Entry(spare)
@@ -83,7 +92,7 @@ class ExperimentWindow(Toplevel):
             labels.append(l)
 
         def updateLabels():
-            for i in range(settings.numsensors):
+            for i in range(len(self.sensors)):
                 labels[i].config(text=": " + str(self.connection.read(i)) + " mV")
             t.after(500, updateLabels)
 
@@ -246,11 +255,11 @@ class ExperimentWindow(Toplevel):
         self.timeEntry.config(state=DISABLED)
         self.rateEntry.config(state=DISABLED)
 
-        self.initialReadings = [self.getCurrentDisplacement(i) for i in range(settings.numsensors)]
-        multipliers = [50 for i in range(settings.numsensors)] #[100/self.initialReadings(i)[0] for i in range(settings.numsensors)] #pre-compute conversion constant into percentage swell
-        self.currentPercentageSwelling = [[] for _ in range(settings.numsensors)]
-        self.currentVoltages = [[] for _ in range(settings.numsensors)]
-        self.actualTimes = [[] for _ in range(settings.numsensors)]
+        self.initialReadings = [self.getCurrentDisplacement(i) for i in range(len(self.sensors))]
+        multipliers = [50 for i in range(len(self.sensors))] #[100/self.initialReadings(i)[0] for i in range(len(self.sensors))] #pre-compute conversion constant into percentage swell
+        self.currentPercentageSwelling = [[] for _ in range(len(self.sensors))]
+        self.currentVoltages = [[] for _ in range(len(self.sensors))]
+        self.actualTimes = [[] for _ in range(len(self.sensors))]
 
         def takeSingleResult(_): #takes <= 3.5ms starting empty w/ random input
             prog = len(self.currentPercentageSwelling[0])
@@ -259,7 +268,7 @@ class ExperimentWindow(Toplevel):
                 return
             self.progressBar["value"] = prog
             self.progressLabel.config(text = str(round(prog/totalNo * 100, 3)) + "%")
-            for i in range(settings.numsensors):
+            for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacement(i)
                 percentage = d * multipliers[i]
                 if (percentage > self.maxY):
@@ -291,7 +300,7 @@ class ExperimentWindow(Toplevel):
         a.set_xlim([0,180])
         a.set_ylim([100,self.maxY])
         self.plots = []
-        for i in range(settings.numsensors):
+        for i in range(len(self.sensors)):
             l, = a.plot([], label=self.sensorNames[i])
             self.plots.append(l)
         h, l = a.get_legend_handles_labels()

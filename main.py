@@ -52,32 +52,15 @@ class MainWindow(Tk):
             f = filedialog.askopenfilename()
             if f:
                 self.withdraw()
-                paramList = []
                 try:
-                    f = open(f)
-                    for i in range(settings.numsensors):
-                        m = f.readline()
-                        b = f.readline()
-                        m = float(m)
-                        b = float(b)
-                        paramList.append([m,b])
-                    f.close()
+                    with open(f, "r") as fileObject:
+                        paramList = [line.split() for line in fileObject.readlines()]
+                        experimentWindow = measure.ExperimentWindow(self, paramList)
                 except Exception as e:
                     messagebox.showerror("Invalid file", "Could not read from this file.")
                     raise e
                     self.deiconify()
                     return
-
-                string = None
-                while string is None:
-                    string = simpledialog.askstring("Name", "Test name:")
-                    if string is None:
-                        self.deiconify()
-                        return
-                    elif string == "":
-                        messagebox.showerror("Name", "Name cannot be empt.y")
-                        string = None
-                experimentWindow = measure.ExperimentWindow(self, paramList, string)
                 self.wait_window(experimentWindow)
 
         loadCalibration = Button(self, text="Load calibration", command=loadSettingsOption)

@@ -26,7 +26,7 @@ class CalibrationWindow(Toplevel):
         self.readoutAfterID = None
         self.measurementAfterID = None
         self.results = [{} for _ in range(settings.numsensors)]
-        self.done = False
+        self.parametersExported = False
 
         """
         self.style = Style()
@@ -36,7 +36,7 @@ class CalibrationWindow(Toplevel):
 
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Export calibration parameters", command=self.exportReadings)
+        filemenu.add_command(label="Export calibration parameters", command=self.exportParameters)
         filemenu.add_command(label="Export raw readings", command=self.exportReadings)
         filemenu.add_command(label="Exit", command=self.fin)
         menubar.add_cascade(label="File", menu=filemenu)
@@ -54,13 +54,27 @@ class CalibrationWindow(Toplevel):
         inputFrame = Frame(leftFrame)
         inputFrame.grid(row=0, column=0, rowspan=3, columnspan=3)
 
-        self.sensorentries = []
+        self.sensorEntries = []
+        self.sensorCheckedVars = []
+        self.checkbuttons = []
+        def switchEntry(i):
+            if self.sensorCheckedVars[i].get() == 1:
+                self.sensorEntries[i].config(state=NORMAL)
+            else:
+                self.sensorEntries[i].config(state=DISABLED)
+
         for i in range(settings.numsensors):
-            Label(inputFrame, text="Distance " + str(i+1) + " (%): ", width=20).grid(row=i, column=0, pady=4)
+            var = IntVar()
+            var.set(1)
+            self.sensorCheckedVars.append(var)
+            checkbutton = Checkbutton(inputFrame, text="Distance " + str(i+1) + " (mm): ", width=20, variable=var,
+                                                command=lambda i=i: switchEntry(i))
+            checkbutton.grid(row=i, column=0, pady=4)
+            self.checkbuttons.append(checkbutton)
             entry = Entry(inputFrame)
             entry.cname = "Distance " + str(i+1)
             entry.grid(row=i, column=1, padx=5)
-            self.sensorentries.append(entry)
+            self.sensorEntries.append(entry)
 
         readingsL = Label(inputFrame, text="Total # of readings: ", width=20)
         readingsL.grid(row=settings.numsensors, column=0, pady=4)
@@ -178,12 +192,15 @@ class CalibrationWindow(Toplevel):
             f.close()
 
     def startReadings(self):
+        toRecord = [] #some sensors will be disabled (via checkbuttons)
         distances = []
-        for sensorEntries in self.sensorentries:
-            d = tools.getFloatFromEntry(sensorEntries, mini=0.1)
-            if d is None:
-                return
-            distances.append(d)
+        for i in range(settings.numsensors):
+            if self.sensorCheckedVars[i].get() == 1:
+                toRecord.append(i)
+                d = tools.getFloatFromEntry(self.sensorEntries[i], mini=0.1)
+                if d is None:
+                    return
+                distances.append(d)
 
         rate = tools.getFloatFromEntry(self.rateEntry, mini=0, maxi=4)
         totalNo = tools.getFloatFromEntry(self.readingsEntry, mini=1, forceInt=True)
@@ -195,31 +212,35 @@ class CalibrationWindow(Toplevel):
 
         self.cancelBtn.config(state=NORMAL)
         self.startBtn.config(state=DISABLED)
+        for checkbutton in self.checkbuttons:
+            checkbutton.config(state = DISABLED)
 
-        currentReadings = [[] for i in range(settings.numsensors)]
+        currentReadings = [[] for i in range(len(toRecord))]
         self.curNumTaken.config(text="Readings taken: 0/" + str(totalNo))
 
         def addResults():
-            for i in range(settings.numsensors):
+            self.parametersExported = False
+            for i in range(len(toRecord)):
+                sensor = toRecord[i]
                 distance = distances[i]
                 
                 if distance > self.maxX:
                     self.maxX = distance + 1
                 
-                if distance in self.results[i]:
-                    self.results[i][distance].merge(currentReadings[i])
-                    res = self.results[i][distance]
+                if distance in self.results[sensor]:
+                    self.results[sensor][distance].merge(currentReadings[i])
+                    res = self.results[sensor][distance]
                 else:
                     cr = self.CalibrationResult(distance, currentReadings[i])
-                    self.results[i][distance] = cr
+                    self.results[sensor][distance] = cr
                     res = cr
                 
                 if res.mean > self.maxY:
                     self.maxY = res.mean + 1
 
-                self.resList.insert(self.sensorTreeviewIDs[i], "end", values=(distance, res.mean, round(res.SD, 3)))
+                self.resList.insert(self.sensorTreeviewIDs[sensor], "end", values=(distance, res.mean, round(res.SD, 3)))
 
-                self.sensorentries[i].delete(0, "end")
+                self.sensorEntries[sensor].delete(0, "end")
 
             self.replot()
             self.stopReadings()
@@ -228,11 +249,15 @@ class CalibrationWindow(Toplevel):
             if len(currentReadings[0]) == totalNo:
                 addResults()
                 self.stopReadings()
+
+                for checkbutton in self.checkbuttons:
+                    checkbutton.config(state=NORMAL)
+
                 return
 
-            for s in range(settings.numsensors):
-                r = self.connection.read(s)
-                currentReadings[s].append(r)
+            for i in range(len(toRecord)):
+                r = self.connection.read(toRecord[i])
+                currentReadings[i].append(r)
 
             self.curNumTaken.config(text="Readings taken: " + str(len(currentReadings[0])) + "/" + str(totalNo))
             self.measurementAfterID = self.measurementFrame.after(rate, takeSingleReading)
@@ -252,7 +277,7 @@ class CalibrationWindow(Toplevel):
     def initGraphFrame(self, fr):
         f = Figure(figsize=(8, 5), dpi=100)
         a = f.add_subplot(111)
-        a.set_xlabel("Distance (%)")
+        a.set_xlabel("Distance (mm)")
         a.set_ylabel("Inductance (mV)")
         self.maxX = self.maxY = 10
         a.set_xlim([0,self.maxX])
@@ -275,7 +300,7 @@ class CalibrationWindow(Toplevel):
 
         for s in range(settings.numsensors):
             if len(self.results[s]) == 0:
-                return
+                continue
 
             xs = []
             ys = []
@@ -297,32 +322,30 @@ class CalibrationWindow(Toplevel):
 
         self.canvas.draw()
 
-    def fin(self):
+    def exportParameters(self): #returns whether or not the user exported
         bad = False
         for i in range(settings.numsensors):
             if len(self.results[i]) < 2:
                 bad = True
                 break
-
         if bad:
-            result = messagebox.askquestion("Not enough points", "Cancel calibration?", icon='warning', parent=self)
-            if result == "yes":
-                self.destroy()
-        else:
-            while not self.done:
-                result = messagebox.askquestion("Save", "Save settings?", parent=self)
-                if result == "yes":
-                    f = filedialog.asksaveasfile(mode='w')
-                    if f is not None:
-                        for i in range(settings.numsensors):
-                            m, b, r = self.getSettings(i)
-                            f.write(str(m) + '\n' + str(b) + '\n')
-                        f.close()
-                        self.destroy()
-                        self.done = True
-                else:
-                    self.destroy()
-                    self.done = True
+            result = messagebox.askquestion("Not enough points", "Some sensors do not have enough distinct readings. Export anyway?", icon='warning', parent=self)
+            if result == "no":
+                return True
+
+        f = filedialog.asksaveasfile(mode='w', parent=self)
+        if f is not None:
+            for i in range(settings.numsensors):
+                if len(self.results[i]) >= 2:
+                    m, b, r = self.getSettings(i)
+                    f.write(str(i) + ' ' + str(m) + ' ' + str(b) + '\n')
+            f.close()
+
+    def fin(self):
+        if not self.parametersExported:
+            if not self.exportParameters():
+                return
+        self.destroy()
 
     def getSettings(self, num):
         if len(self.results[num]) > 1:
