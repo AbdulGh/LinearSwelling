@@ -19,7 +19,7 @@ class AnalysisGraph(Frame):
 
         class NavigationToolbar(NavigationToolbar2TkAgg): 
             def __init__(self, canvas, parent): #get rid of subplot stuff
-                self.toolitems = [t for t in NavigationToolbar2TkAgg.toolitems if t[0] in ('Home', 'Pan', 'Zoom', 'Save')]
+                self.toolitems = [t for t in NavigationToolbar2TkAgg.toolitems if t[0] in ("Home", "Pan", "Zoom", "Save")]
                 NavigationToolbar2TkAgg.__init__(self, canvas, parent)
 
             def set_message(self, msg): #no mouse coordinates
@@ -46,7 +46,6 @@ class AnalysisGraph(Frame):
         self.graph.legend(h, l, loc="upper left")
 
         self.graph.autoscale(True)
-        #self.graph.show()
         self.canvas.draw()
         self.toolbar.update()
 
@@ -64,7 +63,6 @@ class AnalysisGraph(Frame):
         self.graph.legend(h, l, loc="upper left")
 
         self.graph.autoscale(True)
-        #self.graph.show()
         self.canvas.draw()
         self.toolbar.update()
 
@@ -92,9 +90,30 @@ class AnalysisGraph(Frame):
         self.graph.set_xticklabels(xtics, rotation=20, ha="right")
 
         self.graph.autoscale(True)
-        #self.graph.show()
         self.canvas.draw()
         self.toolbar.update()
+
+    def plotRatePercentageSwell(self, runs):
+        self.graph.clear()
+        self.graph.set_ylabel("Rate of swelling (%/m)")
+        self.graph.set_xlabel("Time (m)")
+
+        for i in range(len(runs)):
+            run = runs[i]
+            prefix = str(i) + " - " if len(runs) > 1 else ""
+            for sensorname, sensor in run["sensors"].items():
+                displacements = sensor["pdisplacements"]
+                times = sensor["times"]
+                rateOfChange = [(displacements[j+1] - displacements[j])/(times[j+1] - times[j]) for j in range(len(displacements) - 1)]
+                self.graph.plot(sensor["times"][:-1], rateOfChange, label=prefix + sensorname)
+
+        h, l = self.graph.get_legend_handles_labels()
+        self.graph.legend(h, l)
+
+        self.graph.autoscale(True)
+        self.canvas.draw()
+        self.toolbar.update()
+
 
 
 

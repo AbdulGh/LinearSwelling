@@ -3,8 +3,6 @@ from tkinter import messagebox
 from tkinter import filedialog
 from tkinter import simpledialog
 from tkinter.ttk import *
-import numpy as np
-import random
 import tools
 import settings
 import time
@@ -14,7 +12,6 @@ matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.animation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
 
 class ExperimentWindow(Toplevel):
     def __init__(self, master, paramList):
@@ -27,6 +24,8 @@ class ExperimentWindow(Toplevel):
         self.animation = None
         self.title("Swellometer measurement")
         self.resizable(False, False)
+
+        self.connection = tools.DAQInput()
 
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
@@ -64,6 +63,9 @@ class ExperimentWindow(Toplevel):
 
     def nameSensors(self):
         t = Toplevel(self)
+
+        t.geometry("+%d+%d" % (self.winfo_rootx() + 80, self.winfo_rooty() + 80))
+
         t.title("Sensors")
         fr = Frame(t)
         fr.pack(fill=BOTH, expand=True, padx=8, pady=8)
@@ -82,7 +84,7 @@ class ExperimentWindow(Toplevel):
 
         def updateLabels():
             for i in range(settings.numsensors):
-                labels[i].config(text=": " + str(tools.getCurrentReading(i)) + " mV")
+                labels[i].config(text=": " + str(self.connection.read(i)) + " mV")
             t.after(500, updateLabels)
 
         updateLabels()
@@ -210,7 +212,11 @@ class ExperimentWindow(Toplevel):
             self.stopRecording()
 
         if self.currentPercentageSwelling is not None and not self.exported:
-            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?", icon='warning', parent=self) #todo yesnocancel
+            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?",
+                                                icon='warning', parent=self, type=messagebox.YESNOCANCEL)
+            print(result)
+            if result == "cancel":
+                return
             if result == "yes":
                 self.exportReadings()
         self.destroy()
@@ -262,7 +268,6 @@ class ExperimentWindow(Toplevel):
                 self.currentPercentageSwelling[i].append(d * multipliers[i])
                 self.currentVoltages[i].append(v)
                 self.actualTimes[i].append((time.time() - self.lastStartTime) / 60)
-                #print(d * multipliers[i], self.actualTimes[i])
                 plot = self.plots[i]
                 plot.set_data(self.actualTimes[i], self.currentPercentageSwelling[i])
             return self.plots
@@ -271,9 +276,10 @@ class ExperimentWindow(Toplevel):
         self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=False)
         self.canvas.show()
 
-    def getCurrentDisplacement(self, i):
-        # m,b = self.paramList[i]
-        return [4 + i + random.uniform(-0.3, 0.3), random.randint(0, 10)] #m * tools.getCurrentReading(i) + b
+    def getCurrentDisplacement(self, i): #todo rename
+        m,b = self.paramList[i]
+        v = self.connection.read(i)
+        return  [m * v + b, v]
 
     def initGraphFrame(self, fr):
         f = plt.figure(figsize=(8, 5), dpi=100)

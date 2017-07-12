@@ -20,7 +20,7 @@ class CalibrationWindow(Toplevel):
     def __init__(self, master=None):
         Toplevel.__init__(self, master)
         self.title("Swellometer calibration")
-        self.plotcolours = ["red", "blue", "black", "green"]
+        self.connection = tools.DAQInput()
         self.resizable(False, False)
 
         self.readoutAfterID = None
@@ -34,8 +34,13 @@ class CalibrationWindow(Toplevel):
             self.style.theme_use("clam")
         """
 
-        if master is not None:
-            self.geometry("+%d+%d" % (master.winfo_rootx() - 300, master.winfo_rooty() - 200))
+        menubar = Menu(self)
+        filemenu = Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Export calibration parameters", command=self.exportReadings)
+        filemenu.add_command(label="Export raw readings", command=self.exportReadings)
+        filemenu.add_command(label="Exit", command=self.fin)
+        menubar.add_cascade(label="File", menu=filemenu)
+        self.config(menu=menubar)
 
         self.initwindow()
 
@@ -51,7 +56,7 @@ class CalibrationWindow(Toplevel):
 
         self.sensorentries = []
         for i in range(settings.numsensors):
-            Label(inputFrame, text="Distance " + str(i+1) + " (mm): ", width=20).grid(row=i, column=0, pady=4)
+            Label(inputFrame, text="Distance " + str(i+1) + " (%): ", width=20).grid(row=i, column=0, pady=4)
             entry = Entry(inputFrame)
             entry.cname = "Distance " + str(i+1)
             entry.grid(row=i, column=1, padx=5)
@@ -226,7 +231,7 @@ class CalibrationWindow(Toplevel):
                 return
 
             for s in range(settings.numsensors):
-                r = tools.getCurrentReading(s)
+                r = self.connection.read(s)
                 currentReadings[s].append(r)
 
             self.curNumTaken.config(text="Readings taken: " + str(len(currentReadings[0])) + "/" + str(totalNo))
@@ -279,10 +284,10 @@ class CalibrationWindow(Toplevel):
                 xs.append(result.dist)
                 ys.append(result.mean)
 
-            self.graph.scatter(xs, ys, c=self.plotcolours[s], label="Sensor " + str(s+1))
+            self.graph.scatter(xs, ys, c=settings.plotcolours[s], label="Sensor " + str(s+1))
             if len(self.results[s]) > 1:
                 m, b, r_value, _, _ = scipy.stats.linregress(xs, ys)
-                self.graph.plot([0, self.maxX], [b, m * self.maxX + b], '-', color=self.plotcolours[s])
+                self.graph.plot([0, self.maxX], [b, m * self.maxX + b], '-', color=settings.plotcolours[s])
 
         self.graph.set_xlabel("Distance (%)")
         self.graph.set_ylabel("Inductance (mV)")

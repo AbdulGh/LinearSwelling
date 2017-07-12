@@ -62,8 +62,9 @@ class MainWindow(Tk):
                         b = float(b)
                         paramList.append([m,b])
                     f.close()
-                except:
+                except Exception as e:
                     messagebox.showerror("Invalid file", "Could not read from this file.")
+                    raise e
                     self.deiconify()
                     return
 

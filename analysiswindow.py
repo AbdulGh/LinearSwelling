@@ -94,7 +94,7 @@ class AnalysisWindow(Tk):
 
         Button(leftFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
 
-        OptionMenu(leftFrame, self.graphmode, "Percentage Displacement", "Percentage Displacement", "Voltages", "Total Swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
+        OptionMenu(leftFrame, self.graphmode, "Percentage Displacement", "Percentage Displacement", "Voltages", "Swelling Rate", "Total Swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
         self.setGraphMode()
 
         self.mainloop()
@@ -111,6 +111,8 @@ class AnalysisWindow(Tk):
                 self.graph.plotVoltages(runs)
             elif selection == "Total Swell":
                 self.graph.plotTotalSwells(runs)
+            elif selection == "Swelling Rate":
+                self.graph.plotRatePercentageSwell(runs)
 
     def deleteObject(self, iid, warn=True):
         pointed = self.indexPointers[iid]
