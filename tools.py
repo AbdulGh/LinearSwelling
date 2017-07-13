@@ -1,6 +1,5 @@
 from tkinter import messagebox
 import random
-import numpy
 import settings
 import sys
 
@@ -12,20 +11,20 @@ except Exception as e:
     print("Could not import PyDAQmx. No data can be recieved from the card.") #todo make this fatal
     print("Please make sure PyDAQmx and NI-DAQ are installed.")
         
-def getFloatFromEntry(entry, mini=None, maxi=None, forceInt=False):
+def getFloatFromEntry(master, entry, mini=None, maxi=None, forceInt=False):
         s = entry.get()
         try:
             i = float(s)
             if (mini is not None and i < mini):
-                messagebox.showerror("Error", "Value for '" + entry.cname + "' is too small (minimum " + str(mini) + ")")
+                messagebox.showerror("Error", "Value for '" + entry.cname + "' is too small (minimum " + str(mini) + ")", parent=master)
             elif (maxi is not None and i > maxi):
-                messagebox.showerror("Error", "Value for '" + entry.cname + "' is too large (maximum " + str(maxi) + ")")
+                messagebox.showerror("Error", "Value for '" + entry.cname + "' is too large (maximum " + str(maxi) + ")", parent=master)
             elif forceInt and not i.is_integer():
-                messagebox.showerror("Error", "Value for '" + entry.cname + "' must be an integer")
+                messagebox.showerror("Error", "Value for '" + entry.cname + "' must be an integer", parent=master)
             else:
                 return i
         except ValueError:
-            messagebox.showerror("Error", "Value for '" + entry.cname + "' is not numerical")
+            messagebox.showerror("Error", "Value for '" + entry.cname + "' is not numerical", parent=master)
 
 class DAQInput():
     def __init__(self):

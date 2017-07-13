@@ -5,7 +5,6 @@ import measure
 from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
-from tkinter import simpledialog
 from tkinter.ttk import *
 
 class MainWindow(Tk):
@@ -52,8 +51,7 @@ class MainWindow(Tk):
                         paramList = [line.split() for line in fileObject.readlines()]
                         experimentWindow = measure.ExperimentWindow(self, paramList)
                 except ValueError as e:
-                    messagebox.showerror("Invalid file", "Could not read from this file.")
-                    raise e #debug
+                    messagebox.showerror("Invalid file", "Could not read from this file.", parent=self)
                     self.deiconify()
                     return
                 self.wait_window(experimentWindow)

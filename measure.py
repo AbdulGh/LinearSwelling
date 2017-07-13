@@ -4,7 +4,6 @@ from tkinter import filedialog
 from tkinter import simpledialog
 from tkinter.ttk import *
 import tools
-import settings
 import time
 
 import matplotlib
@@ -38,12 +37,12 @@ class ExperimentWindow(Toplevel):
 
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Rename test", command=self.getName)
         filemenu.add_command(label="Export results", command=self.exportReadings)
         filemenu.add_command(label="Exit", command=self.fin)
         menubar.add_cascade(label="File", menu=filemenu)
         settingsMenu = Menu(menubar, tearoff=0)
         settingsMenu.add_command(label="Set up sensors", command=self.setupSensors)
+        settingsMenu.add_command(label="Test settings", command=self.setupTest)
         menubar.add_cascade(label="Settings", menu=settingsMenu)
         self.config(menu=menubar)
 
@@ -56,20 +55,42 @@ class ExperimentWindow(Toplevel):
         """
         self.name = time.ctime()
         self.initwindow()
-        self.getName()
+
+        self.name = time.ctime()
+        self.notes = ""
+        self.setupTest()
         self.setupSensors()
 
-    def getName(self):
-        while True:
-            self.name = simpledialog.askstring("Name", "Test name:", initialvalue=self.name)
-            if self.name is None:
-                self.name = time.ctime()
+    def setupTest(self):
+        t = Toplevel(self)
+        t.geometry("+%d+%d" % (self.winfo_rootx() + 80, self.winfo_rooty() + 80))
+        t.title("Test settings")
+        fr = Frame(t)
+        fr.pack(fill=BOTH, expand=True, padx=8, pady=8)
+        nameFrame = Frame(fr)
+        nameFrame.pack(side=TOP, fill=X, expand=True)
+        Label(nameFrame, text="Test name: ").pack(side=LEFT)
+        nameEntry = Entry(nameFrame)
+        nameEntry.insert(0, self.name)
+        nameEntry.pack(side=LEFT, padx=(4,0), fill=X, expand=True)
 
-            if self.name == "":
-                messagebox.showerror("Name", "Name cannot be empty.")
-                self.name = None
-            else:
-                break
+        notesFrame = Frame(fr)
+        notesFrame.pack(side=TOP, fill=BOTH, expand=True, pady=(4,0))
+        Label(notesFrame, text="Test notes:", anchor=W, justify=LEFT).pack(side=TOP, anchor=W)
+        notes = Text(notesFrame, height=15, width=50)
+        notes.insert(END, self.notes)
+        notes.pack(side=TOP, fill=BOTH, expand=True, pady=4)
+
+        def setTestSettings():
+            name = nameEntry.get()
+            if name == "":
+                messagebox.showerror("Error", "Test name cannot be empty.", parent=self)
+                return
+            self.name = name
+            self.notes = notes.get()
+
+        Button(fr, text="Done", command=setTestSettings).pack(side=RIGHT)
+        t.resizable(False, False)
 
     def setupSensors(self):
         t = Toplevel(self)
@@ -79,7 +100,6 @@ class ExperimentWindow(Toplevel):
         fr.pack(fill=BOTH, expand=True, padx=8, pady=8)
         nameentries = []
         thicknessentries = []
-        labels = []
         Label(fr, text="Sensor Name").grid(row=0, column=0, padx=(0,4))
         Label(fr, text="Initial thickness(mm)").grid(row=0, column=1, padx=(4,0))
         for i in range(len(self.sensors)):
@@ -98,12 +118,12 @@ class ExperimentWindow(Toplevel):
             for i in range(len(values)):
                 for j in range(i+1, len(values)):
                     if values[i] == values[j]:
-                        messagebox.showerror("Error", "Sensor names must have distinct names.")
+                        messagebox.showerror("Error", "Sensor names must have distinct names.", parent=self)
                         return
                     
             self.initialThicknesses = []
             for i in range(len(self.sensors)):
-                thickness = tools.getFloatFromEntry(thicknessentries[i], mini=0.1)
+                thickness = tools.getFloatFromEntry(self, thicknessentries[i], mini=0.1)
                 if thickness is None:
                     return
                 self.initialThicknesses.append(thickness)
@@ -171,7 +191,10 @@ class ExperimentWindow(Toplevel):
 
         f = filedialog.asksaveasfile(mode='w', parent=self)
         if f is not None:
-            f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nTime(m) - Displacement(%) - Voltage(mV)\n")
+            f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nNotes:\n")
+            notes = self.notes.translate(str.maketrans({"\\": r"\\"}))
+            f.write(notes + "\n\\\n")
+            f.write("Time(m) - Displacement(%) - Voltage(mV)\n")
             for s in range(len(self.currentPercentageSwelling)):
                 string = "\n*** " + self.sensorNames[s] + " ***\n"
                 string += "Recieved calibration line: d = " + str(self.paramList[s][0]) + " v + " + str(self.paramList[s][1]) + "\n"
@@ -207,8 +230,8 @@ class ExperimentWindow(Toplevel):
 
         self.exported = False
 
-        t = tools.getFloatFromEntry(self.timeEntry, mini=0)
-        rate = tools.getFloatFromEntry(self.rateEntry, mini=0.01, maxi=120)
+        t = tools.getFloatFromEntry(self, self.timeEntry, mini=0)
+        rate = tools.getFloatFromEntry(self, self.rateEntry, mini=0.01, maxi=120)
 
         if time is None or rate is None:
             return
