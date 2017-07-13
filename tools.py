@@ -12,7 +12,6 @@ except Exception as e:
     print("Could not import PyDAQmx. No data can be recieved from the card.") #todo make this fatal
     print("Please make sure PyDAQmx and NI-DAQ are installed.")
         
-
 def getFloatFromEntry(entry, mini=None, maxi=None, forceInt=False):
         s = entry.get()
         try:
@@ -53,3 +52,6 @@ class DAQInput():
             return data[0]
         else:
             return random.randint(0,10)
+
+if __name__ == '__main__':
+    print("Run main.py")

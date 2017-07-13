@@ -31,14 +31,9 @@ class MainWindow(Tk):
             self.withdraw()
             calibrationWindow = calibration.CalibrationWindow(self)
             self.wait_window(calibrationWindow)
-            if calibrationWindow.done:
-                paramList = []
-                for i in range(settings.numsensors):
-                    paramList.append(calibrationWindow.getSettings(i)[:2])
-
-                experimentWindow = measure.ExperimentWindow(self, paramList)
+            if calibrationWindow.finalParams is not None:
+                experimentWindow = measure.ExperimentWindow(self, calibrationWindow.finalParams)
                 self.wait_window(experimentWindow)
-
             else:
                 self.deiconify()
 
@@ -49,16 +44,16 @@ class MainWindow(Tk):
         launchCalibration.pack(pady=10)
 
         def loadSettingsOption():
-            f = filedialog.askopenfilename()
+            f = filedialog.askopenfilename(parent=self)
             if f:
                 self.withdraw()
                 try:
                     with open(f, "r") as fileObject:
                         paramList = [line.split() for line in fileObject.readlines()]
                         experimentWindow = measure.ExperimentWindow(self, paramList)
-                except Exception as e:
+                except ValueError as e:
                     messagebox.showerror("Invalid file", "Could not read from this file.")
-                    raise e
+                    raise e #debug
                     self.deiconify()
                     return
                 self.wait_window(experimentWindow)

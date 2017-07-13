@@ -26,6 +26,7 @@ class CalibrationWindow(Toplevel):
         self.readoutAfterID = None
         self.measurementAfterID = None
         self.results = [{} for _ in range(settings.numsensors)]
+        self.finalParams = None
         self.parametersExported = False
 
         """
@@ -139,11 +140,12 @@ class CalibrationWindow(Toplevel):
         graph.pack(side=RIGHT, fill=BOTH, expand=True, padx=8, pady=8)
 
         bottomBtnFrame = Frame(self)
-        bottomBtnFrame.pack(side=BOTTOM, fill=X, padx=8, pady=(0,8))
+        bottomBtnFrame.pack(side=BOTTOM, fill=X, padx=8, pady=(0,4))
         exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
         exitBtn.pack(side=RIGHT)
+        """
         exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
-        exportBtn.pack(side=RIGHT, padx=(0,5))
+        exportBtn.pack(side=RIGHT, padx=(0,5))"""
 
     class CalibrationResult:
         def __init__(self, dist, inductionList):
@@ -172,7 +174,7 @@ class CalibrationWindow(Toplevel):
             self.SD = scipy.std(self.inductionList)
 
     def exportReadings(self):
-        f = filedialog.asksaveasfile(mode='w')
+        f = filedialog.asksaveasfile(mode='w', parent=self)
         if f is not None:
             f.write("Calibration report - " + str(datetime.datetime.now()) + "\n")
             for s in range(settings.numsensors):
@@ -249,10 +251,6 @@ class CalibrationWindow(Toplevel):
             if len(currentReadings[0]) == totalNo:
                 addResults()
                 self.stopReadings()
-
-                for checkbutton in self.checkbuttons:
-                    checkbutton.config(state=NORMAL)
-
                 return
 
             for i in range(len(toRecord)):
@@ -267,6 +265,8 @@ class CalibrationWindow(Toplevel):
     def stopReadings(self):
         self.cancelBtn.config(state=DISABLED)
         self.startBtn.config(state=NORMAL)
+        for checkbutton in self.checkbuttons:
+                    checkbutton.config(state=NORMAL)
 
         if self.measurementAfterID is not None:
             self.measurementFrame.after_cancel(self.measurementAfterID)
@@ -314,7 +314,7 @@ class CalibrationWindow(Toplevel):
                 m, b, r_value, _, _ = scipy.stats.linregress(xs, ys)
                 self.graph.plot([0, self.maxX], [b, m * self.maxX + b], '-', color=settings.plotcolours[s])
 
-        self.graph.set_xlabel("Distance (%)")
+        self.graph.set_xlabel("Distance (mm)")
         self.graph.set_ylabel("Inductance (mV)")
 
         h,l = self.graph.get_legend_handles_labels()
@@ -324,7 +324,7 @@ class CalibrationWindow(Toplevel):
 
     def exportParameters(self): #returns whether or not the user exported
         bad = False
-        for i in range(settings.numsensors):
+        for i in range(settings.numsensors): #todo fail if no sensors have enough readings
             if len(self.results[i]) < 2:
                 bad = True
                 break
@@ -343,19 +343,26 @@ class CalibrationWindow(Toplevel):
 
     def fin(self):
         if not self.parametersExported:
-            if not self.exportParameters():
-                return
+            res = messagebox.askyesno("Parameters not saved", "Do you want to save the calibration parameters?", parent=self)
+            if res and self.exportParameters():
+                    return
+        self.finalParams = []
+        for i in range(settings.numsensors):
+            params = self.getSettings(i)
+            if params is not None:
+                self.finalParams.append([i, params[0], params[1]])
         self.destroy()
 
-    def getSettings(self, num):
-        if len(self.results[num]) > 1:
-            xs = []
-            ys = []
-            for r in self.results[num].values():
-                xs.append(r.dist)
-                ys.append(r.mean)
-            m, b, r, _, _ = scipy.stats.linregress(xs, ys)
-            return m, b, r
-
+    def getSettings(self, num): #'the other way around' as we later relate inductance to displacement
+        if len(self.results[num]) < 2:
+            return None
+        xs = []
+        ys = []
+        for r in self.results[num].values():
+            ys.append(r.dist)
+            xs.append(r.mean)
+        m, b, r, _, _ = scipy.stats.linregress(xs, ys)
+        return m, b, r
+        
 if __name__ == '__main__':
-    calibrationWindow = CalibrationWindow()
+    print("Run main.py")

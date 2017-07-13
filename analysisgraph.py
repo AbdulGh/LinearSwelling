@@ -22,8 +22,8 @@ class AnalysisGraph(Frame):
                 self.toolitems = [t for t in NavigationToolbar2TkAgg.toolitems if t[0] in ("Home", "Pan", "Zoom", "Save")]
                 NavigationToolbar2TkAgg.__init__(self, canvas, parent)
 
-            def set_message(self, msg): #no mouse coordinates
-                pass
+            #def set_message(self, msg): #no mouse coordinates
+            #    pass
 
         self.toolbar = NavigationToolbar(canvas, self)
         self.toolbar.update()
@@ -44,7 +44,6 @@ class AnalysisGraph(Frame):
                 self.graph.plot(sensor["times"], sensor["pdisplacements"], label=prefix + sensorname)
         h, l = self.graph.get_legend_handles_labels()
         self.graph.legend(h, l, loc="upper left")
-
         self.graph.autoscale(True)
         self.canvas.draw()
         self.toolbar.update()
@@ -61,7 +60,6 @@ class AnalysisGraph(Frame):
                 self.graph.plot(sensor["times"], sensor["voltages"], label=prefix + sensorname)
         h, l = self.graph.get_legend_handles_labels()
         self.graph.legend(h, l, loc="upper left")
-
         self.graph.autoscale(True)
         self.canvas.draw()
         self.toolbar.update()
@@ -88,7 +86,6 @@ class AnalysisGraph(Frame):
         self.graph.bar(indexes, totalSwells, align="center")
         self.graph.set_xticks(indexes)
         self.graph.set_xticklabels(xtics, rotation=20, ha="right")
-
         self.graph.autoscale(True)
         self.canvas.draw()
         self.toolbar.update()
@@ -109,11 +106,10 @@ class AnalysisGraph(Frame):
 
         h, l = self.graph.get_legend_handles_labels()
         self.graph.legend(h, l)
-
         self.graph.autoscale(True)
         self.canvas.draw()
         self.toolbar.update()
 
-
-
+if __name__ == '__main__':
+    print("Run main.py")
 

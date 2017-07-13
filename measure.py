@@ -23,11 +23,11 @@ class ExperimentWindow(Toplevel):
                 if len(triple) != 3:
                     raise ValueError
                 self.sensors.append(int(triple[0]))
-                self.paramList.append(triple[1:])
-            except:
+                self.paramList.append([float(x) for x in triple[1:]])
+            except Exception:
                 raise ValueError("Bad input")
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
-
+        self.initialThicknesses = None
         self.currentPercentageSwelling = None
         self.exported = False
         self.animation = None
@@ -43,7 +43,7 @@ class ExperimentWindow(Toplevel):
         filemenu.add_command(label="Exit", command=self.fin)
         menubar.add_cascade(label="File", menu=filemenu)
         settingsMenu = Menu(menubar, tearoff=0)
-        settingsMenu.add_command(label="Name sensors", command=self.nameSensors)
+        settingsMenu.add_command(label="Set up sensors", command=self.setupSensors)
         menubar.add_cascade(label="Settings", menu=settingsMenu)
         self.config(menu=menubar)
 
@@ -57,6 +57,7 @@ class ExperimentWindow(Toplevel):
         self.name = time.ctime()
         self.initwindow()
         self.getName()
+        self.setupSensors()
 
     def getName(self):
         while True:
@@ -70,51 +71,50 @@ class ExperimentWindow(Toplevel):
             else:
                 break
 
-    def nameSensors(self):
+    def setupSensors(self):
         t = Toplevel(self)
-
         t.geometry("+%d+%d" % (self.winfo_rootx() + 80, self.winfo_rooty() + 80))
-
         t.title("Sensors")
         fr = Frame(t)
         fr.pack(fill=BOTH, expand=True, padx=8, pady=8)
-        entries = []
+        nameentries = []
+        thicknessentries = []
         labels = []
+        Label(fr, text="Sensor Name").grid(row=0, column=0, padx=(0,4))
+        Label(fr, text="Initial thickness(mm)").grid(row=0, column=1, padx=(4,0))
         for i in range(len(self.sensors)):
-            spare = Frame(fr)
-            spare.pack(side=TOP, fill=X, pady=(0,4))
-            e = Entry(spare)
+            e = Entry(fr)
             e.insert(0, self.sensorNames[i])
-            entries.append(e)
-            e.pack(side=LEFT)
-            l = Label(spare)
-            l.pack(side=LEFT)
-            labels.append(l)
+            nameentries.append(e)
+            e.grid(row=i+1, column=0, pady=2, padx=(0,4))
+            th = Entry(fr)
+            thicknessentries.append(th)
+            th.grid(row=i+1, column=1, pady=2, padx=(4,0))
 
-        def updateLabels():
-            for i in range(len(self.sensors)):
-                labels[i].config(text=": " + str(self.connection.read(i)) + " mV")
-            t.after(500, updateLabels)
-
-        updateLabels()
-
-        def updateNames():
-            values = [entry.get() for entry in entries]
+        def updateSettings():
+            values = [entry.get() for entry in nameentries]
             #check sensors have unique names
-            #could be done w/ a map or sorting but we have like 4 sensors
+            #could be done asymptotically faster w/ a map or sorting but we have like 4 sensors
             for i in range(len(values)):
                 for j in range(i+1, len(values)):
                     if values[i] == values[j]:
                         messagebox.showerror("Error", "Sensor names must have distinct names.")
                         return
+                    
+            self.initialThicknesses = []
+            for i in range(len(self.sensors)):
+                thickness = tools.getFloatFromEntry(thicknessentries[i], mini=0.1)
+                if thickness is None:
+                    return
+                self.initialThicknesses.append(thickness)
 
             self.sensorNames = values
             self.graph.legend(labels = self.sensorNames)
             self.canvas.show()
             t.destroy()
 
-        Button(fr, text="Save", command=updateNames).pack(side=RIGHT, padx=(8,0))
-        Button(fr, text="Cancel", command=t.destroy).pack(side=RIGHT)
+        Button(fr, text="Save", command=updateSettings).grid(row=len(self.sensors) + 1, column=1, sticky=E,  padx=(8,0))
+        #Button(fr, text="Cancel", command=t.destroy).pack(side=RIGHT)
         t.resizable(False, False)
 
     def initwindow(self):
@@ -142,7 +142,6 @@ class ExperimentWindow(Toplevel):
 
         btnFrame = Frame(topFrame)
         btnFrame.pack(side=RIGHT, padx=8, pady=8)
-        #Button(btnFrame, text="Name sensors...", command=self.nameSensors).grid(row=0, column=0, padx=2)
         stopBtn = Button(btnFrame, text="Stop", command=self.stopRecording)
         stopBtn.grid(row=0, column=1, padx=2)
         stopBtn.config(state=DISABLED)
@@ -154,24 +153,10 @@ class ExperimentWindow(Toplevel):
         graph = self.initGraphFrame(mainFrame)
         graph.pack(side=RIGHT, fill=BOTH, padx=8, pady=8)
 
-        """
-        checkboxFrame = Frame(leftFrame)
-        self.renderSensorVars = []
-        for i in range(settings.numsensors):
-            var = IntVar()
-            var.set(1)
-            self.renderSensorVars.append(var)
-            Checkbutton(checkboxFrame, text="Sensor " + str(i), command=self.updateGraph, variable=var).grid(row = i // 2, column = i % 2, padx=5, pady=5, sticky=N+E+S+W)
-        checkboxFrame.grid(row=4, column=0, rowspan=3)
-        """
-
         bottomBtnFrame = Frame(self)
         bottomBtnFrame.pack(side=BOTTOM, fill=X)
         Button(bottomBtnFrame, text="Done", command=self.fin).pack(side=RIGHT, padx=8, pady=8)
-        #self.exportBtn = Button(bottomBtnFrame, text="Export", command=self.exportReadings)
-        #self.exportBtn.pack(side=RIGHT, padx=(5,0))
-        #self.exportBtn.config(state=DISABLED)
-
+        
         progressFrame = Frame(bottomBtnFrame)
         self.progressLabel = Label(progressFrame, text="Waiting...", width=10)
         self.progressLabel.pack(side=LEFT)
@@ -189,8 +174,10 @@ class ExperimentWindow(Toplevel):
             f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nTime(m) - Displacement(%) - Voltage(mV)\n")
             for s in range(len(self.currentPercentageSwelling)):
                 string = "\n*** " + self.sensorNames[s] + " ***\n"
-                string += "Recieved calibration line: y = " + str(self.paramList[s][0]) + " x + " + str(self.paramList[s][1]) + "\n"
-                string += "Initial reading: " + str(self.initialReadings[s][0]) + " " + str(self.initialReadings[s][1]) + "\n"
+                string += "Recieved calibration line: d = " + str(self.paramList[s][0]) + " v + " + str(self.paramList[s][1]) + "\n"
+                string += "Initial thickness (mm): " + str(self.initialThicknesses[s]) + "\n"
+                string += "Initial displacement (mm): " + str(self.initialReadings[s][0]) + "\n"
+                string += "Initial voltage (mV): " + str(self.initialReadings[s][1]) + "\n"
                 for i in range(len(self.currentPercentageSwelling[s])):
                     string += str(self.actualTimes[s][i]) + " " + str(self.currentPercentageSwelling[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
                 f.write(string)
@@ -208,27 +195,9 @@ class ExperimentWindow(Toplevel):
         self.startBtn.config(state=NORMAL)
         self.timeEntry.config(state=NORMAL)
         self.rateEntry.config(state=NORMAL)
-        #self.exportBtn.config(state=NORMAL)
 
         self.progressLabel.config(text="Done.")
         self.progressBar["value"] = 0
-
-    def fin(self):
-        if self.animation: #still recording
-            result = messagebox.askquestion("Test in progress", "Stop testing?", icon='warning', parent=self)
-            if result == "no":
-                return
-            self.stopRecording()
-
-        if self.currentPercentageSwelling is not None and not self.exported:
-            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?",
-                                                icon='warning', parent=self, type=messagebox.YESNOCANCEL)
-            print(result)
-            if result == "cancel":
-                return
-            if result == "yes":
-                self.exportReadings()
-        self.destroy()
 
     def startRecording(self):
         if self.currentPercentageSwelling is not None and not self.exported:
@@ -241,7 +210,7 @@ class ExperimentWindow(Toplevel):
         t = tools.getFloatFromEntry(self.timeEntry, mini=0)
         rate = tools.getFloatFromEntry(self.rateEntry, mini=0.01, maxi=120)
 
-        if (time is None or rate is None):
+        if time is None or rate is None:
             return
 
         totalNo = int(t * rate) + 1
@@ -256,7 +225,7 @@ class ExperimentWindow(Toplevel):
         self.rateEntry.config(state=DISABLED)
 
         self.initialReadings = [self.getCurrentDisplacement(i) for i in range(len(self.sensors))]
-        multipliers = [50 for i in range(len(self.sensors))] #[100/self.initialReadings(i)[0] for i in range(len(self.sensors))] #pre-compute conversion constant into percentage swell
+        multipliers = [100/self.initialThicknesses[i] for i in range(len(self.sensors))] #pre-compute conversion constant into percentage swell
         self.currentPercentageSwelling = [[] for _ in range(len(self.sensors))]
         self.currentVoltages = [[] for _ in range(len(self.sensors))]
         self.actualTimes = [[] for _ in range(len(self.sensors))]
@@ -270,11 +239,12 @@ class ExperimentWindow(Toplevel):
             self.progressLabel.config(text = str(round(prog/totalNo * 100, 3)) + "%")
             for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacement(i)
-                percentage = d * multipliers[i]
+                d = self.initialReadings[i][0] - d
+                percentage = 100 + d * multipliers[i]
                 if (percentage > self.maxY):
                     self.maxY = percentage + 10
                     self.graph.set_ylim([100, self.maxY])
-                self.currentPercentageSwelling[i].append(d * multipliers[i])
+                self.currentPercentageSwelling[i].append(percentage)
                 self.currentVoltages[i].append(v)
                 self.actualTimes[i].append((time.time() - self.lastStartTime) / 60)
                 plot = self.plots[i]
@@ -287,7 +257,8 @@ class ExperimentWindow(Toplevel):
 
     def getCurrentDisplacement(self, i): #todo rename
         m,b = self.paramList[i]
-        v = self.connection.read(i)
+        v = self.connection.read(self.sensors[i])
+        #print(i, m, v, b)
         return  [m * v + b, v]
 
     def initGraphFrame(self, fr):
@@ -298,7 +269,7 @@ class ExperimentWindow(Toplevel):
         a.set_ylabel("Relative swell (%)")
         self.maxY = 300
         a.set_xlim([0,180])
-        a.set_ylim([100,self.maxY])
+        a.set_ylim([95,self.maxY])
         self.plots = []
         for i in range(len(self.sensors)):
             l, = a.plot([], label=self.sensorNames[i])
@@ -315,19 +286,21 @@ class ExperimentWindow(Toplevel):
 
         return wrapper
 
-    """
-    def currentReadingUpdate(self, label):
-        update = int(1000 / tools.getFloatFromEntry(self.rateEntry, mini=0))
-        def readingUpdate():
-            i = tools.getCurrentReading()
-            label.config(text="Current displacement(%): " + str(i))
-            self.readoutAfterID = label.after(update, readingUpdate)
-        if self.readoutAfterID is not None:
-            label.after_cancel(self.readoutAfterID)
-        readingUpdate()"""
+    def fin(self):
+        if self.animation: #still recording
+            result = messagebox.askquestion("Test in progress", "Stop testing?", icon='warning', parent=self)
+            if result == "no":
+                return
+            self.stopRecording()
+
+        if self.currentPercentageSwelling is not None and not self.exported:
+            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?",
+                                                icon='warning', parent=self, type=messagebox.YESNOCANCEL)
+            if result == "cancel":
+                return
+            if result == "yes":
+                self.exportReadings()
+        self.destroy()
 
 if __name__ == '__main__':
-    root = Tk()
-    root.withdraw()
-    measure = ExperimentWindow(root, [[1,1],[2,2],[3,4],[2,2]])
-    root.wait_window(measure)
+    print("Run main.py")

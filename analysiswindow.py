@@ -173,7 +173,9 @@ class AnalysisWindow(Tk):
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + sensor["name"]).pack(side=TOP)
         Label(frame, text="# of readings: " + str(len(sensor["times"]))).pack(side=TOP)
-        Label(frame, text="Initial voltage (mV): " + str(sensor["initial"]))
+        Label(frame, text="Initial displacement (mm): " + str(sensor["initialDisplacement"])).pack(side=TOP)
+        Label(frame, text="Initial displacement (mm): " + str(sensor["initialVoltage"])).pack(side=TOP)
+        Label(frame, text="Initial sample thickness (mm): " + str(sensor["initialThickness"])).pack(side=TOP)
 
         listFrame = Frame(frame, width=300)
         listFrame.pack(side=TOP)
@@ -255,7 +257,9 @@ class AnalysisWindow(Tk):
                         sensor["name"] = name
                         calib = f.readline().split()
                         sensor["params"] = [float(calib[5]), float(calib[8])]
-                        sensor["initial"] = float(f.readline().split()[2])
+                        sensor["initialThickness"] = float(f.readline().split()[3])
+                        sensor["initialDisplacement"] = float(f.readline().split()[3])
+                        sensor["initialVoltage"] = float(f.readline().split()[3])
                         sensor["times"] = []
                         sensor["pdisplacements"] = []
                         sensor["voltages"] = []
@@ -279,6 +283,7 @@ class AnalysisWindow(Tk):
                     runs.append({"runname": runname, "timeofrun": timeofrun, "rate":rate, "sensors": sensors})
             except Exception as e:
                 messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
+                raise e
 
         for run in runs:
             rootid = self.importList.insert("", "end", values=(str(len(self.loadedRuns) + 1) + " - " + run["runname"], ""), open=True, tags=("run"))
@@ -288,9 +293,6 @@ class AnalysisWindow(Tk):
                 self.indexPointers[self.importList.insert(rootid, "end", values=(name, str(len(sensor["times"]))))] = sensor
 
         self.setGraphMode()
-
-def test():
-    a = AnalysisWindow()
     
 if __name__ == "__main__":
-    test()
+    AnalysisWindow()
