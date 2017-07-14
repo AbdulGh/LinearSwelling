@@ -26,7 +26,7 @@ class ExperimentWindow(Toplevel):
             except Exception:
                 raise ValueError("Bad input")
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
-        self.initialThicknesses = None
+        self.initialThicknesses = [2 for _ in range(len(self.sensors))]
         self.currentPercentageSwelling = None
         self.exported = False
         self.animation = None
@@ -38,6 +38,7 @@ class ExperimentWindow(Toplevel):
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
         filemenu.add_command(label="Export results", command=self.exportReadings)
+        filemenu.add_command(label="Clear results", command=self.clearResults)
         filemenu.add_command(label="Exit", command=self.fin)
         menubar.add_cascade(label="File", menu=filemenu)
         settingsMenu = Menu(menubar, tearoff=0)
@@ -55,12 +56,33 @@ class ExperimentWindow(Toplevel):
         """
         self.name = time.ctime()
         self.initwindow()
-
-        self.name = time.ctime()
         self.notes = ""
         self.setupTest()
         self.setupSensors()
         self.lift()
+
+    def clearResults(self):
+        if messagebox.askyesno("Clear Results", "Are you sure you want to reset the test?", parent=self):
+            self.stopRecording()
+            self.sensorNames = ["Sensor " + str(i + 1) for i in self.sensors]
+            self.initialThicknesses = [2 for _ in range(len(self.sensors))]
+            self.currentPercentageSwelling = None
+            self.exported = False
+            self.animation = None
+            self.graph.clear()
+            self.graph.set_xlabel("Time (m)")
+            self.graph.set_ylabel("Relative swell (%)")
+            self.graph.set_xlim([0, 180])
+            self.graph.set_ylim([95, self.maxY])
+
+            self.plots = []
+            for i in range(len(self.sensors)):
+                l, = self.graph.plot([], label=self.sensorNames[i])
+                self.plots.append(l)
+            h, l = self.graph.get_legend_handles_labels()
+            self.graph.legend(h, l)
+
+            self.canvas.show()
 
     def setupTest(self):
         t = Toplevel(self)
@@ -107,12 +129,15 @@ class ExperimentWindow(Toplevel):
         thicknessentries = []
         Label(fr, text="Sensor Name").grid(row=0, column=0, padx=(0,4))
         Label(fr, text="Initial thickness(mm)").grid(row=0, column=1, padx=(4,0))
+        stat = NORMAL if self.currentPercentageSwelling is None else DISABLED #disallow changes to initial thicknesses if the test has started - we calculate relative swell
         for i in range(len(self.sensors)):
             e = Entry(fr)
             e.insert(0, self.sensorNames[i])
             nameentries.append(e)
             e.grid(row=i+1, column=0, pady=2, padx=(0,4))
             th = Entry(fr)
+            th.insert(0, str(self.initialThicknesses[i]))
+            th.config(state = stat)
             thicknessentries.append(th)
             th.grid(row=i+1, column=1, pady=2, padx=(4,0))
 
@@ -138,7 +163,7 @@ class ExperimentWindow(Toplevel):
             self.canvas.show()
             t.destroy()
 
-        Button(fr, text="Save", command=updateSettings).grid(row=len(self.sensors) + 1, column=1, sticky=E,  padx=(8,0))
+        Button(fr, text="Save", command=updateSettings).grid(row=len(self.sensors) + 1, column=1, sticky=E,  padx=(8,0), pady=(4,0))
         #Button(fr, text="Cancel", command=t.destroy).pack(side=RIGHT)
         t.resizable(False, False)
 
@@ -207,8 +232,7 @@ class ExperimentWindow(Toplevel):
                 string = "\n*** " + self.sensorNames[s] + " ***\n"
                 string += "Recieved calibration line: d = " + str(self.paramList[s][0]) + " v + " + str(self.paramList[s][1]) + "\n"
                 string += "Initial thickness (mm): " + str(self.initialThicknesses[s]) + "\n"
-                string += "Initial displacement (mm): " + str(self.initialReadings[s][0]) + "\n"
-                string += "Initial voltage (mV): " + str(self.initialReadings[s][1]) + "\n"
+                string += "Initial displacement (mm): " + str(self.initialReadings[s]) + "\n"
                 for i in range(len(self.currentPercentageSwelling[s])):
                     string += str(self.actualTimes[s][i]) + " " + str(self.currentPercentageSwelling[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
                 f.write(string)
@@ -246,7 +270,6 @@ class ExperimentWindow(Toplevel):
 
         totalNo = int(t * rate) + 1
         rate = self.lastrate = 60000/rate
-        self.progressBar.config(maximum=totalNo)
 
         self.graph.set_xlim([0, t])
 
@@ -255,11 +278,23 @@ class ExperimentWindow(Toplevel):
         self.timeEntry.config(state=DISABLED)
         self.rateEntry.config(state=DISABLED)
 
-        self.initialReadings = [self.getCurrentDisplacement(i) for i in range(len(self.sensors))]
+        #get average initial displacements
+        self.progressBar.config(maximum=10)
+        self.progressLabel.config(text="Starting...")
+        self.update()
+        readings = [[] for _ in range(len(self.sensors))]
+        for i in range(10):
+            self.progressBar["value"] = i
+            self.update()
+            for s in range(len(self.sensors)):
+                readings[s].append(self.getCurrentDisplacementVoltage(s)[0])
+            time.sleep(0.2)
+        self.initialReadings = [sum(j)/len(j) for j in readings]
         multipliers = [100/self.initialThicknesses[i] for i in range(len(self.sensors))] #pre-compute conversion constant into percentage swell
         self.currentPercentageSwelling = [[] for _ in range(len(self.sensors))]
         self.currentVoltages = [[] for _ in range(len(self.sensors))]
         self.actualTimes = [[] for _ in range(len(self.sensors))]
+        self.progressBar.config(maximum=totalNo)
 
         def takeSingleResult(_): #takes <= 3.5ms starting empty w/ random input
             prog = len(self.currentPercentageSwelling[0])
@@ -267,10 +302,12 @@ class ExperimentWindow(Toplevel):
                 self.stopRecording()
                 return
             self.progressBar["value"] = prog
-            self.progressLabel.config(text = str(round(prog/totalNo * 100, 3)) + "%")
+            self.progressLabel.config(text = str(round(prog/totalNo * 100, 2)) + "%")
             for i in range(len(self.sensors)):
-                d, v = self.getCurrentDisplacement(i)
-                d = self.initialReadings[i][0] - d
+                d, v = self.getCurrentDisplacementVoltage(i)
+                if i == 1: #debug
+                    print(d)
+                d = self.initialReadings[i] - d
                 percentage = 100 + d * multipliers[i]
                 if (percentage > self.maxY):
                     self.maxY = percentage + 10
@@ -286,7 +323,7 @@ class ExperimentWindow(Toplevel):
         self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=False)
         self.canvas.show()
 
-    def getCurrentDisplacement(self, i): #todo rename
+    def getCurrentDisplacementVoltage(self, i):
         m,b = self.paramList[i]
         v = self.connection.read(self.sensors[i])
         #print(i, m, v, b)

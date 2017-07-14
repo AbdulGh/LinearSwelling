@@ -175,7 +175,6 @@ class AnalysisWindow(Tk):
         Label(frame, text="Name: " + sensor["name"]).pack(side=TOP)
         Label(frame, text="# of readings: " + str(len(sensor["times"]))).pack(side=TOP)
         Label(frame, text="Initial displacement (mm): " + str(sensor["initialDisplacement"])).pack(side=TOP)
-        Label(frame, text="Initial displacement (mm): " + str(sensor["initialVoltage"])).pack(side=TOP)
         Label(frame, text="Initial sample thickness (mm): " + str(sensor["initialThickness"])).pack(side=TOP)
 
         listFrame = Frame(frame, width=300)
@@ -273,7 +272,6 @@ class AnalysisWindow(Tk):
                         sensor["params"] = [float(calib[5]), float(calib[8])]
                         sensor["initialThickness"] = float(f.readline().split()[3])
                         sensor["initialDisplacement"] = float(f.readline().split()[3])
-                        sensor["initialVoltage"] = float(f.readline().split()[3])
                         sensor["times"] = []
                         sensor["pdisplacements"] = []
                         sensor["voltages"] = []
