@@ -144,6 +144,7 @@ class AnalysisWindow(Tk):
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + run["runname"]).pack(side=TOP)
         Label(frame, text="Time: " + time.strftime("%a, %d %b %Y %H:%M:%S", run["timeofrun"])).pack(side=TOP)
+        Label(frame, text="Notes:\n" + run["notes"], anchor=W, justify=LEFT, width=50, wraplength=300).pack(side=TOP)
 
         listbox = Listbox(frame, height=0)
 
@@ -220,7 +221,7 @@ class AnalysisWindow(Tk):
         return [n.get() == 1 for n in self.checkboxVars]
 
     def importData(self):
-        filenames = filedialog.askopenfilenames()
+        filenames = filedialog.askopenfilenames(parent=self, defaultextension=".data", filetypes=[("Data File", "*.data")])
         if not filenames:
             return
 
@@ -242,8 +243,21 @@ class AnalysisWindow(Tk):
                             self.deleteObject(iid, warn=False)
 
                     rate = f.readline()[:-1].split()[1]
-                    f.readline()
-                    f.readline()
+                    f.readline() #'Notes:'
+                    notes = ""
+                    while True: #notes are delimited by single backslash
+                        c = f.read(1)
+                        if not c:
+                            raise ValueError("Unexpected EOF")
+                        if c == '\\':
+                            c = f.read(1)
+                            if c == '\\':
+                                notes += '\\'
+                            else:
+                                break
+                        notes += c
+                    f.readline() #'Time(m) - Displacement(%) - Voltage(mV)'
+                    f.readline() #newline
                     names = []
                     sensors = []
                     line = f.readline()
@@ -280,7 +294,7 @@ class AnalysisWindow(Tk):
 
                     toimport = self.chooseSensorsDialogue(names, filename)
                     sensors = {names[i]:sensors[i] for i in range(len(names)) if toimport[i]}
-                    runs.append({"runname": runname, "timeofrun": timeofrun, "rate":rate, "sensors": sensors})
+                    runs.append({"runname": runname, "timeofrun": timeofrun, "rate":rate, "sensors": sensors, "notes":notes})
             except Exception as e:
                 messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
                 raise e

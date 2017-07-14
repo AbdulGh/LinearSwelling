@@ -60,6 +60,7 @@ class ExperimentWindow(Toplevel):
         self.notes = ""
         self.setupTest()
         self.setupSensors()
+        self.lift()
 
     def setupTest(self):
         t = Toplevel(self)
@@ -87,10 +88,14 @@ class ExperimentWindow(Toplevel):
                 messagebox.showerror("Error", "Test name cannot be empty.", parent=self)
                 return
             self.name = name
-            self.notes = notes.get()
+            self.notes = notes.get("1.0", END)
+            t.destroy()
 
         Button(fr, text="Done", command=setTestSettings).pack(side=RIGHT)
         t.resizable(False, False)
+
+        t.grab_set()
+        self.wait_window(t)
 
     def setupSensors(self):
         t = Toplevel(self)
@@ -123,7 +128,7 @@ class ExperimentWindow(Toplevel):
                     
             self.initialThicknesses = []
             for i in range(len(self.sensors)):
-                thickness = tools.getFloatFromEntry(self, thicknessentries[i], mini=0.1)
+                thickness = tools.getFloatFromEntry(self, thicknessentries[i], "Thickness " + str(i+1), mini=0.1)
                 if thickness is None:
                     return
                 self.initialThicknesses.append(thickness)
@@ -136,6 +141,9 @@ class ExperimentWindow(Toplevel):
         Button(fr, text="Save", command=updateSettings).grid(row=len(self.sensors) + 1, column=1, sticky=E,  padx=(8,0))
         #Button(fr, text="Cancel", command=t.destroy).pack(side=RIGHT)
         t.resizable(False, False)
+
+        t.grab_set()
+        self.wait_window(t)
 
     def initwindow(self):
         mainFrame = Frame(self)
@@ -189,7 +197,7 @@ class ExperimentWindow(Toplevel):
             messagebox.showerror("No readings", "Please take some readings first.", parent=self)
             return
 
-        f = filedialog.asksaveasfile(mode='w', parent=self)
+        f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".data", filetypes=[("Data File", "*.data")])
         if f is not None:
             f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nNotes:\n")
             notes = self.notes.translate(str.maketrans({"\\": r"\\"}))
@@ -230,8 +238,8 @@ class ExperimentWindow(Toplevel):
 
         self.exported = False
 
-        t = tools.getFloatFromEntry(self, self.timeEntry, mini=0)
-        rate = tools.getFloatFromEntry(self, self.rateEntry, mini=0.01, maxi=120)
+        t = tools.getFloatFromEntry(self, self.timeEntry, "Duration", mini=0)
+        rate = tools.getFloatFromEntry(self, self.rateEntry, "Readings/minute", mini=0.01, maxi=120)
 
         if time is None or rate is None:
             return

@@ -81,7 +81,6 @@ class CalibrationWindow(Toplevel):
             checkbutton.grid(row=i, column=0, pady=4)
             self.checkbuttons.append(checkbutton)
             entry = Entry(inputFrame)
-            entry.cname = "Distance " + str(i+1)
             entry.grid(row=i, column=1, padx=5)
             self.sensorEntries.append(entry)
 
@@ -89,7 +88,6 @@ class CalibrationWindow(Toplevel):
         readingsL.grid(row=settings.numsensors, column=0, pady=4)
         readingsEntry = Entry(inputFrame)
         readingsEntry.insert(0, "20")
-        readingsEntry.cname = "Total # of readings"
         readingsEntry.grid(row=4, column=1, padx=5)
         self.readingsEntry = readingsEntry
 
@@ -97,7 +95,6 @@ class CalibrationWindow(Toplevel):
         rateL.grid(row=settings.numsensors + 1, column=0, pady=4)
         rateEntry = Entry(inputFrame)
         rateEntry.insert(0, "2")
-        rateEntry.cname = "Readings/second"
         rateEntry.grid(row=5, column=1)
         self.rateEntry = rateEntry
 
@@ -218,13 +215,13 @@ class CalibrationWindow(Toplevel):
         for i in range(settings.numsensors):
             if self.sensorCheckedVars[i].get() == 1:
                 toRecord.append(i)
-                d = tools.getFloatFromEntry(self, self.sensorEntries[i], mini=0.1)
+                d = tools.getFloatFromEntry(self, self.sensorEntries[i], "Sensor " + str(i+1), mini=0.1)
                 if d is None:
                     return
                 distances.append(d)
 
-        rate = tools.getFloatFromEntry(self, self.rateEntry, mini=0, maxi=4)
-        totalNo = tools.getFloatFromEntry(self, self.readingsEntry, mini=1, forceInt=True)
+        rate = tools.getFloatFromEntry(self, self.rateEntry, "Rate Entry", mini=0, maxi=4)
+        totalNo = tools.getFloatFromEntry(self, self.readingsEntry, "# of readings", mini=1, forceInt=True)
         if (rate is None or totalNo is None):
             return
 
@@ -335,7 +332,7 @@ class CalibrationWindow(Toplevel):
         self.canvas.draw()
 
     def exportParameters(self):
-        f = filedialog.asksaveasfile(mode='w', parent=self)
+        f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
         if f is not None:
             for i in range(settings.numsensors):
                 if len(self.results[i]) >= 2:

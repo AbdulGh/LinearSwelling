@@ -43,7 +43,7 @@ class MainWindow(Tk):
         launchCalibration.pack(pady=10)
 
         def loadSettingsOption():
-            f = filedialog.askopenfilename(parent=self)
+            f = filedialog.askopenfilename(parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
             if f:
                 self.withdraw()
                 try:
