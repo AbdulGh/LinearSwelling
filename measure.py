@@ -59,7 +59,9 @@ class ExperimentWindow(Toplevel):
         self.notes = ""
         self.setupTest()
         self.setupSensors()
-        self.lift()
+        self.lift() #the shell keeps jumping in front for whatever reason
+        self.attributes("-topmost", 1)
+        self.attributes("-topmost", 0)
 
     def clearResults(self):
         if messagebox.askyesno("Clear Results", "Are you sure you want to reset the test?", parent=self):
@@ -290,7 +292,8 @@ class ExperimentWindow(Toplevel):
                 readings[s].append(self.getCurrentDisplacementVoltage(s)[0])
             time.sleep(0.2)
         self.initialReadings = [sum(j)/len(j) for j in readings]
-        multipliers = [100/self.initialThicknesses[i] for i in range(len(self.sensors))] #pre-compute conversion constant into percentage swell
+        
+        multipliers = [100/self.initialThicknesses[i] for i in range(len(self.sensors))] #pre-compute conversion constant into percentage swelling
         self.currentPercentageSwelling = [[] for _ in range(len(self.sensors))]
         self.currentVoltages = [[] for _ in range(len(self.sensors))]
         self.actualTimes = [[] for _ in range(len(self.sensors))]
@@ -305,7 +308,7 @@ class ExperimentWindow(Toplevel):
             self.progressLabel.config(text = str(round(prog/totalNo * 100, 2)) + "%")
             for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacementVoltage(i)
-                if i == 1: #debug
+                if i == 0: #debug
                     print(d)
                 d = self.initialReadings[i] - d
                 percentage = 100 + d * multipliers[i]

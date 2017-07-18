@@ -16,7 +16,6 @@ from matplotlib.figure import Figure
 #daq 6210
 
 class CalibrationWindow(Toplevel):
-
     def __init__(self, master=None):
         Toplevel.__init__(self, master)
         self.title("Swellometer calibration")
@@ -26,6 +25,7 @@ class CalibrationWindow(Toplevel):
         self.readoutAfterID = None
         self.measurementAfterID = None
         self.results = [{} for _ in range(settings.numsensors)]
+        self.resListPointers = {}
         self.finalParams = None
         self.parametersExported = False
         self.finalParams = None
@@ -45,6 +45,8 @@ class CalibrationWindow(Toplevel):
         self.config(menu=menubar)
 
         self.plotColours = ["red", "blue", "black", "green"]
+
+        self.protocol('WM_DELETE_WINDOW', self.fin)
 
         self.initwindow()
 
@@ -87,7 +89,7 @@ class CalibrationWindow(Toplevel):
         readingsL = Label(inputFrame, text="Total # of readings: ", width=20)
         readingsL.grid(row=settings.numsensors, column=0, pady=4)
         readingsEntry = Entry(inputFrame)
-        readingsEntry.insert(0, "20")
+        readingsEntry.insert(0, "10")
         readingsEntry.grid(row=4, column=1, padx=5)
         self.readingsEntry = readingsEntry
 
@@ -128,6 +130,32 @@ class CalibrationWindow(Toplevel):
         resList.heading("std", text="Std.Dev. (mV)")
         resList.column("std", minwidth=10, width=50)
 
+        class ResListPopup(Menu):
+            def __init__(self, master):
+                Menu.__init__(self, master, tearoff=0)
+                self.master = master
+                self.iid = None
+                self.add_command(label="Remove", command=lambda: self.master.deleteReading(self.iid))
+
+            def popup(self, x, y, iid):
+                self.iid = iid
+                self.tk_popup(x, y)
+
+            def deleteObject(self):
+                self.master.deleteReading(self.iid)
+                
+        self.resListPopup = ResListPopup(self)
+
+        def resListRightClick(event):
+            iid = resList.identify_row(event.y)
+            if iid and resList.item(iid)["tags"] == '': #is not a 'sensor' header
+                resList.selection_set(iid)
+                self.resListPopup.popup(event.x_root, event.y_root, iid)
+            else:
+                pass
+            
+        resList.bind("<Button-3>", resListRightClick)
+                
         titleFont = font.Font(family='Helvetica', size=10, weight='bold')
         resList.tag_configure("title", font=titleFont)
 
@@ -150,12 +178,14 @@ class CalibrationWindow(Toplevel):
         exitBtn.pack(side=RIGHT)
 
     class CalibrationResult:
-        def __init__(self, dist, inductionList):
+        def __init__(self, dist, inductionList, sensor):
             self.dist = dist
+            self.sensor = sensor
             self.num = len(inductionList)
             self.inductionList = inductionList
             self.mean = sum(inductionList) / len(inductionList)
             self.SD = scipy.std(inductionList)
+            self.iid = None
 
         def toStr(self):
             return str(self.dist) + "mm    -    " + str(round(self.mean,3)) + "mV    -    SD " + str(round(self.SD, 3)) + "mV"
@@ -174,6 +204,13 @@ class CalibrationWindow(Toplevel):
             self.num = len(self.inductionList)
             self.mean = sum(self.inductionList) / len(self.inductionList)
             self.SD = scipy.std(self.inductionList)
+
+    def deleteReading(self, iid):
+        self.resList.delete(iid)
+        res = self.resListPointers[iid]
+        del self.resListPointers[iid]
+        del self.results[res.sensor][res.dist]
+        self.replot()
 
     def exportReadings(self):
         f = filedialog.asksaveasfile(mode='w', parent=self)
@@ -220,6 +257,10 @@ class CalibrationWindow(Toplevel):
                     return
                 distances.append(d)
 
+        if len(toRecord) == 0:
+            messagebox.showerror("No sensors", "Please enable some sensors first!", parent=self)
+            return
+
         rate = tools.getFloatFromEntry(self, self.rateEntry, "Rate Entry", mini=0, maxi=4)
         totalNo = tools.getFloatFromEntry(self, self.readingsEntry, "# of readings", mini=1, forceInt=True)
         if (rate is None or totalNo is None):
@@ -243,19 +284,23 @@ class CalibrationWindow(Toplevel):
                     self.maxX = distance + 1
                 
                 if distance in self.results[sensor]:
-                    self.results[sensor][distance].merge(currentReadings[i])
                     res = self.results[sensor][distance]
+                    res.merge(currentReadings[i])
+                    self.resList.delete(res.iid)
+                    del self.resListPointers[res.iid]
                 else:
-                    cr = self.CalibrationResult(distance, currentReadings[i])
+                    cr = self.CalibrationResult(distance, currentReadings[i], sensor)
                     self.results[sensor][distance] = cr
                     res = cr
                 
                 if res.mean > self.maxY:
                     self.maxY = res.mean + 1
 
-                self.resList.insert(self.sensorTreeviewIDs[sensor], "end", values=(distance, res.mean, round(res.SD, 3)))
-
+                res.iid = self.resList.insert(self.sensorTreeviewIDs[sensor], "end", values=(distance, res.mean, round(res.SD, 3)))
+                self.resListPointers[res.iid] = res
+                
                 self.sensorEntries[sensor].delete(0, "end")
+                
 
             self.replot()
 
@@ -319,9 +364,7 @@ class CalibrationWindow(Toplevel):
                 ys.append(result.mean)
 
             self.graph.scatter(xs, ys, c=self.plotColours[s], label="Sensor " + str(s+1))
-            if len(self.results[s]) > 1:
-                m, b, r_value, _, _ = scipy.stats.linregress(xs, ys)
-                self.graph.plot([0, self.maxX], [b, m * self.maxX + b], '-', color=self.plotColours[s])
+            self.graph.plot(xs, ys, c=self.plotColours[s])
 
         self.graph.set_xlabel("Distance (mm)")
         self.graph.set_ylabel("Inductance (mV)")
@@ -334,11 +377,24 @@ class CalibrationWindow(Toplevel):
     def exportParameters(self):
         f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
         if f is not None:
-            for i in range(settings.numsensors):
-                if len(self.results[i]) >= 2:
-                    m, b, r = self.getSettings(i)
-                    f.write(str(i) + ' ' + str(m) + ' ' + str(b) + '\n')
+            toWrite = self.getParameters()
+            for sensorInfo in toWrite:
+                f.write(sensorInfo[0] + '\n')
+                for i in range(1, len(sensorInfo)):
+                    x, y = sensorInfo[i]
+                    f.write(x + ' ' + y + '\n')
             f.close()
+
+    #returns [[sensornum, [x0, y0]...]...]
+    def getParameters(self):
+        sensors = []
+        for i in range(settings.numsensors):
+            if len(self.results[i]) >= 2:
+                #results is a list of points for this sensor sorted by the average inductance
+                results = sorted(list(self.results[i].items()), key = self.results[i].get)
+                #'the other way around' as we later relate inductance to displacement
+                sensors.append([i] + [[y,x] for (x, y) in results])
+        return sensors
 
     def fin(self):
         good = False  # there exists a sensor with enough readings
@@ -362,7 +418,7 @@ class CalibrationWindow(Toplevel):
 
         if bad:
             result = messagebox.askquestion("Not enough points",
-                                            "Some sensors do not have enough distinct readings. Export anyway?",
+                                            "Some sensors do not have enough distinct readings. Continue anyway?",
                                             icon='warning', parent=self)
             if result == "no":
                 return False
