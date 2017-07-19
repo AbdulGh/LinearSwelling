@@ -268,10 +268,11 @@ class AnalysisWindow(Tk):
                         name = " ".join(line[1:-1])
                         names.append(name)
                         sensor["name"] = name
-                        calib = f.readline().split()
-                        sensor["params"] = [float(calib[5]), float(calib[8])]
+                        print("here")
                         sensor["initialThickness"] = float(f.readline().split()[3])
+                        print("here")
                         sensor["initialDisplacement"] = float(f.readline().split()[3])
+                        print("here")
                         sensor["times"] = []
                         sensor["pdisplacements"] = []
                         sensor["voltages"] = []
@@ -295,7 +296,6 @@ class AnalysisWindow(Tk):
                     runs.append({"runname": runname, "timeofrun": timeofrun, "rate":rate, "sensors": sensors, "notes":notes})
             except Exception as e:
                 messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
-                raise e
 
         for run in runs:
             rootid = self.importList.insert("", "end", values=(str(len(self.loadedRuns) + 1) + " - " + run["runname"], ""), open=True, tags=("run"))

@@ -1,7 +1,6 @@
 from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
-from tkinter import simpledialog
 from tkinter.ttk import *
 import tools
 import time
@@ -17,12 +16,10 @@ class ExperimentWindow(Toplevel):
         Toplevel.__init__(self, master)
         self.paramList = []
         self.sensors = []
-        for triple in sensorsettings:
+        for sensor in sensorsettings:
             try:
-                if len(triple) != 3:
-                    raise ValueError
-                self.sensors.append(int(triple[0]))
-                self.paramList.append([float(x) for x in triple[1:]])
+                self.sensors.append(sensor[0])
+                self.paramList.append(sensor[1:])
             except Exception:
                 raise ValueError("Bad input")
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
@@ -232,7 +229,6 @@ class ExperimentWindow(Toplevel):
             f.write("Time(m) - Displacement(%) - Voltage(mV)\n")
             for s in range(len(self.currentPercentageSwelling)):
                 string = "\n*** " + self.sensorNames[s] + " ***\n"
-                string += "Recieved calibration line: d = " + str(self.paramList[s][0]) + " v + " + str(self.paramList[s][1]) + "\n"
                 string += "Initial thickness (mm): " + str(self.initialThicknesses[s]) + "\n"
                 string += "Initial displacement (mm): " + str(self.initialReadings[s]) + "\n"
                 for i in range(len(self.currentPercentageSwelling[s])):
@@ -308,8 +304,6 @@ class ExperimentWindow(Toplevel):
             self.progressLabel.config(text = str(round(prog/totalNo * 100, 2)) + "%")
             for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacementVoltage(i)
-                if i == 0: #debug
-                    print(d)
                 d = self.initialReadings[i] - d
                 percentage = 100 + d * multipliers[i]
                 if (percentage > self.maxY):
@@ -327,10 +321,10 @@ class ExperimentWindow(Toplevel):
         self.canvas.show()
 
     def getCurrentDisplacementVoltage(self, i):
-        m,b = self.paramList[i]
+        points = self.paramList[i]
         v = self.connection.read(self.sensors[i])
         #print(i, m, v, b)
-        return  [m * v + b, v]
+        return  [piecewiseLinearInterpolate(points, v), v]
 
     def initGraphFrame(self, fr):
         f = plt.figure(figsize=(8, 5), dpi=100)
@@ -372,6 +366,30 @@ class ExperimentWindow(Toplevel):
             if result == "yes":
                 self.exportReadings()
         self.destroy()
+
+#xs must be sorted in ascending order!
+def piecewiseLinearInterpolate(points, xval):    
+    if len(points) < 2:
+        raise ValueError("Need at least two points!")
+    #check if we're past the left, extrapolate using first two points if so
+    if xval < points[0][0]:
+        x1, y1 = points[0]
+        x2, y2 = points[1]
+        m = (y2 - y1) / (x2 - x1)
+        return y1 - m * (x2 - xval)
+    for i in range(len(points) - 1):
+        if xval > points[i+1][0]:
+            continue
+        else:
+            x1, y1 = points[i]
+            x2, y2 = points[i+1]
+            deltax = xval - points[i][0]
+            return y1 + (y2 - y1) * (xval - x1)/(x2-x1)
+    #if we get here we're past the last point - just extrapolate the last gradient
+    x1, y1 = points[-2]
+    x2, y2 = points[-1]
+    m = (y2 - y1) / (x2 - x1)
+    return y2 + m * (xval - x2)
 
 if __name__ == '__main__':
     print("Run main.py")

@@ -3,6 +3,7 @@ from tkinter import messagebox
 from tkinter import filedialog
 from tkinter.ttk import *
 from tkinter import font
+#import numpy as np
 import scipy.stats
 import tools
 import matplotlib
@@ -219,12 +220,6 @@ class CalibrationWindow(Toplevel):
             for s in range(settings.numsensors):
                 values = list(self.results[s].values())
                 string = "\n***Sensor " + str(s+1) + "***\n"
-                if len(values) > 1:
-                    m, b, r = self.getSettings(s)
-                    string += "Regression line: d = " + str(m) + " v + " + str(b) + "\n"
-                    string += "r-value: " + str(r) + "\n"
-                else:
-                    string += "Not enough readings to form a line\n"
                 string += "Total # of distinct distances: " + str(len(values)) + "\n"
                 for i in range(len(values)):
                     string += "---Reading " + str(i) + "---\n"
@@ -363,8 +358,10 @@ class CalibrationWindow(Toplevel):
                 xs.append(result.dist)
                 ys.append(result.mean)
 
+            xrange = max(xs) - min(xs)
+
             self.graph.scatter(xs, ys, c=self.plotColours[s], label="Sensor " + str(s+1))
-            self.graph.plot(xs, ys, c=self.plotColours[s])
+            #todo plot here
 
         self.graph.set_xlabel("Distance (mm)")
         self.graph.set_ylabel("Inductance (mV)")
@@ -377,23 +374,24 @@ class CalibrationWindow(Toplevel):
     def exportParameters(self):
         f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
         if f is not None:
-            toWrite = self.getParameters()
-            for sensorInfo in toWrite:
-                f.write(sensorInfo[0] + '\n')
-                for i in range(1, len(sensorInfo)):
-                    x, y = sensorInfo[i]
-                    f.write(x + ' ' + y + '\n')
-            f.close()
+            parameters = self.getParameters()
+            for sensor in parameters:
+                f.write(str(sensor[0]) + "\n")
+                for x, y in sensor[1:]:
+                    f.write (str(x) + " " + str(y) + "\n")
 
     #returns [[sensornum, [x0, y0]...]...]
     def getParameters(self):
         sensors = []
         for i in range(settings.numsensors):
             if len(self.results[i]) >= 2:
+                #print(list(self.results[i].items()))
+                #exit()
                 #results is a list of points for this sensor sorted by the average inductance
-                results = sorted(list(self.results[i].items()), key = self.results[i].get)
+                results = sorted(list(self.results[i].items()), key = lambda res: res[1].mean)
                 #'the other way around' as we later relate inductance to displacement
-                sensors.append([i] + [[y,x] for (x, y) in results])
+                sensors.append([i] + [[y.mean,x] for (x, y) in results])
+        print(sensors)
         return sensors
 
     def fin(self):
@@ -428,13 +426,10 @@ class CalibrationWindow(Toplevel):
             if res:
                 self.exportParameters()
 
-        self.finalParams = []
-        for i in range(settings.numsensors):
-            params = self.getSettings(i)
-            if params is not None:
-                self.finalParams.append([i, params[0], params[1]])
+        self.finalParams = self.getParameters()
         self.destroy()
 
+    """
     def getSettings(self, num):
         if len(self.results[num]) < 2:
             return None
@@ -443,8 +438,16 @@ class CalibrationWindow(Toplevel):
         for r in self.results[num].values(): #'the other way around' as we later relate inductance to displacement
             ys.append(r.dist)
             xs.append(r.mean)
-        m, b, r, _, _ = scipy.stats.linregress(xs, ys)
-        return m, b, r
+
+        drange = np.ptp(ys)
+
+        if len(xs) < settings.linearpoints or drange < settings.linearrange: #linear regression
+            m, b, _, _, _ = scipy.stats.linregress(xs, ys)
+            return m, b
+        else:
+            p, _, _, _, _ = np.polyfit(xs, ys, 2, full=True)
+            return p
+    """
         
 if __name__ == '__main__':
     print("Run main.py")
