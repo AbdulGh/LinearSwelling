@@ -24,13 +24,13 @@ class ExperimentWindow(Toplevel):
                 raise ValueError("Bad input")
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
         self.initialThicknesses = [2 for _ in range(len(self.sensors))]
-        self.currentPercentageSwelling = None
+        self.currentPercentageSwelling = None #percentage swelling of ongoing run
         self.exported = False
-        self.animation = None
+        self.animation = None #matplotlib graph animation
         self.title("Swellometer measurement")
         self.resizable(False, False)
-
         self.connection = tools.DAQInput()
+        self.outputWindow = None
 
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
@@ -42,15 +42,12 @@ class ExperimentWindow(Toplevel):
         settingsMenu.add_command(label="Set up sensors", command=self.setupSensors)
         settingsMenu.add_command(label="Test settings", command=self.setupTest)
         menubar.add_cascade(label="Settings", menu=settingsMenu)
+        viewmenu = Menu(menubar, tearoff=0)
+        viewmenu.add_command(label="Sensor outputs", command=self.launchOutputWindow)
+        menubar.add_cascade(label="View", menu=viewmenu)
+        
         self.config(menu=menubar)
-
         self.protocol('WM_DELETE_WINDOW', self.fin)
-
-        """
-        self.style = Style()
-        if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")
-        """
         self.name = time.ctime()
         self.initwindow()
         self.notes = ""
@@ -63,8 +60,8 @@ class ExperimentWindow(Toplevel):
     def clearResults(self):
         if messagebox.askyesno("Clear Results", "Are you sure you want to reset the test?", parent=self):
             self.stopRecording()
-            self.sensorNames = ["Sensor " + str(i + 1) for i in self.sensors]
-            self.initialThicknesses = [2 for _ in range(len(self.sensors))]
+            #self.sensorNames = ["Sensor " + str(i + 1) for i in self.sensors]
+            #self.initialThicknesses = [2 for _ in range(len(self.sensors))]
             self.currentPercentageSwelling = None
             self.exported = False
             self.animation = None
@@ -163,7 +160,6 @@ class ExperimentWindow(Toplevel):
             t.destroy()
 
         Button(fr, text="Save", command=updateSettings).grid(row=len(self.sensors) + 1, column=1, sticky=E,  padx=(8,0), pady=(4,0))
-        #Button(fr, text="Cancel", command=t.destroy).pack(side=RIGHT)
         t.resizable(False, False)
 
         t.grab_set()
@@ -187,7 +183,7 @@ class ExperimentWindow(Toplevel):
         rateL = Label(inputFrame, text="Readings/minute: ", width=15)
         rateL.grid(row=2, column=0, padx=5, pady=5)
         rateEntry = Entry(inputFrame)
-        rateEntry.insert(0, "2")
+        rateEntry.insert(0, "30")
         rateEntry.cname = "Readings/minute"
         rateEntry.grid(row=2, column=1, padx=5)
         self.rateEntry = rateEntry
@@ -276,10 +272,11 @@ class ExperimentWindow(Toplevel):
         self.timeEntry.config(state=DISABLED)
         self.rateEntry.config(state=DISABLED)
 
-        #get average initial displacements
         self.progressBar.config(maximum=10)
         self.progressLabel.config(text="Starting...")
         self.update()
+
+        #get average initial displacements
         readings = [[] for _ in range(len(self.sensors))]
         for i in range(10):
             self.progressBar["value"] = i
@@ -295,7 +292,7 @@ class ExperimentWindow(Toplevel):
         self.actualTimes = [[] for _ in range(len(self.sensors))]
         self.progressBar.config(maximum=totalNo)
 
-        def takeSingleResult(_): #takes <= 3.5ms starting empty w/ random input
+        def takeSingleResult(_):
             prog = len(self.currentPercentageSwelling[0])
             if prog >= totalNo:
                 self.stopRecording()
@@ -317,13 +314,19 @@ class ExperimentWindow(Toplevel):
             return self.plots
 
         self.lastStartTime = time.time()
-        self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=False)
+        self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=True)
         self.canvas.show()
+
+    def launchOutputWindow(self):
+        if self.outputWindow is None or not self.outputWindow.winfo_exists(): #closed or was never opened
+            self.outputWindow = tools.DAQRawOutputDialog(self, self.connection)
+            self.outputWindow.mainloop()
+        else:
+            self.outputWindow.lift()
 
     def getCurrentDisplacementVoltage(self, i):
         points = self.paramList[i]
         v = self.connection.read(self.sensors[i])
-        #print(i, m, v, b)
         return  [piecewiseLinearInterpolate(points, v), v]
 
     def initGraphFrame(self, fr):
@@ -365,6 +368,9 @@ class ExperimentWindow(Toplevel):
                 return
             if result == "yes":
                 self.exportReadings()
+
+        if self.outputWindow is not None and self.outputWindow.winfo_exists():
+            self.outputWindow.destroy()
         self.destroy()
 
 #xs must be sorted in ascending order!

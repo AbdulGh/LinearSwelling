@@ -9,6 +9,7 @@ import tools
 import matplotlib
 import datetime
 import settings
+from numpy import argsort
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -23,26 +24,24 @@ class CalibrationWindow(Toplevel):
         self.connection = tools.DAQInput()
         self.resizable(False, False)
 
+        #used by tkinter to update labels
         self.readoutAfterID = None
         self.measurementAfterID = None
-        self.results = [{} for _ in range(settings.numsensors)]
-        self.resListPointers = {}
-        self.finalParams = None
+        self.results = [CalibrationWindow.SensorList(i) for i in range(settings.numsensors)]
+        self.resListPointers = {} #treeview ids -> CalibrationResult
+        self.finalParams = None #used by other windows to check if the user calibrated successfully
         self.parametersExported = False
-        self.finalParams = None
-
-        """
-        self.style = Style()
-        if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")
-        """
+        self.outputWindow = None
 
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
         filemenu.add_command(label="Export calibration parameters", command=self.exportParameters)
         filemenu.add_command(label="Export raw readings", command=self.exportReadings)
         filemenu.add_command(label="Exit", command=self.fin)
+        viewmenu = Menu(menubar, tearoff=0)
+        viewmenu.add_command(label="Sensor outputs", command=self.launchOutputWindow)
         menubar.add_cascade(label="File", menu=filemenu)
+        menubar.add_cascade(label="View", menu=viewmenu)
         self.config(menu=menubar)
 
         self.plotColours = ["red", "blue", "black", "green"]
@@ -178,6 +177,13 @@ class CalibrationWindow(Toplevel):
         exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
         exitBtn.pack(side=RIGHT)
 
+    def launchOutputWindow(self):
+        if self.outputWindow is None or not self.outputWindow.winfo_exists(): #closed or was never opened
+            self.outputWindow = tools.DAQRawOutputDialog(self, self.connection)
+            self.outputWindow.mainloop()
+        else:
+            self.outputWindow.lift()
+            
     class CalibrationResult:
         def __init__(self, dist, inductionList, sensor):
             self.dist = dist
@@ -200,17 +206,54 @@ class CalibrationWindow(Toplevel):
                 string += str(i) + " - " + str(self.inductionList[i]) + "\n"
             return string
         
-        def merge(self, merginglist): #combine different results in the same object to avoid vertical regression lines
+        def merge(self, merginglist): #absorb a list of readings and update stats
             self.inductionList += merginglist
             self.num = len(self.inductionList)
             self.mean = sum(self.inductionList) / len(self.inductionList)
             self.SD = scipy.std(self.inductionList)
 
+    class SensorList:
+        def __init__(self, sensornum):
+            self.distances = []
+            self.results = []
+            self.sensornum = sensornum
+
+        #inserts/merges and returns the result object
+        def insert(self, distance, voltageList):
+            #could be done with a heap but there is going to be max 20 readings per sensor
+            for i in range(len(self.distances)):
+                if distance == self.distances[i]:
+                    self.results[i].merge(voltageList)
+                    return self.results[i]
+
+                if distance < self.distances[i]:
+                    self.distances.insert(i, distance)
+                    self.results.insert(i, CalibrationWindow.CalibrationResult(distance, voltageList, self.sensornum))
+                    return self.results[i]
+
+            self.distances.append(distance)
+            result = CalibrationWindow.CalibrationResult(distance, voltageList, self.sensornum)
+            self.results.append(result)
+            return result
+
+        def delete(self, distance):
+            index = self.distances.index(distance)
+            del self.distances[index]
+            del self.results[index]
+
+        def getPointsSortedByDistance(self):
+            return self.distances, [result.mean for result in self.results]
+
+        #used finally when exporting parameters
+        def getPointsSortedByVoltage(self):
+            voltages = [result.mean for result in self.results]
+            sortedIndicies = argsort(voltages)
+            return [voltages[i] for i in sortedIndicies], [self.distances[i] for i in sortedIndicies]
+
     def deleteReading(self, iid):
         self.resList.delete(iid)
         res = self.resListPointers[iid]
-        del self.resListPointers[iid]
-        del self.results[res.sensor][res.dist]
+        self.results[res.sensor].delete(res.dist)
         self.replot()
 
     def exportReadings(self):
@@ -218,12 +261,12 @@ class CalibrationWindow(Toplevel):
         if f is not None:
             f.write("Calibration report - " + str(datetime.datetime.now()) + "\n")
             for s in range(settings.numsensors):
-                values = list(self.results[s].values())
+                results = self.results[s].results
                 string = "\n***Sensor " + str(s+1) + "***\n"
-                string += "Total # of distinct distances: " + str(len(values)) + "\n"
-                for i in range(len(values)):
+                string += "Total # of distinct distances: " + str(len(results)) + "\n"
+                for i in range(len(results)):
                     string += "---Reading " + str(i) + "---\n"
-                    string += values[i].export()
+                    string += results[i].export()
                 f.write(string)
             f.close()
 
@@ -278,15 +321,7 @@ class CalibrationWindow(Toplevel):
                 if distance > self.maxX:
                     self.maxX = distance + 1
                 
-                if distance in self.results[sensor]:
-                    res = self.results[sensor][distance]
-                    res.merge(currentReadings[i])
-                    self.resList.delete(res.iid)
-                    del self.resListPointers[res.iid]
-                else:
-                    cr = self.CalibrationResult(distance, currentReadings[i], sensor)
-                    self.results[sensor][distance] = cr
-                    res = cr
+                res = self.results[sensor].insert(distance, currentReadings[i])
                 
                 if res.mean > self.maxY:
                     self.maxY = res.mean + 1
@@ -328,7 +363,8 @@ class CalibrationWindow(Toplevel):
         a = f.add_subplot(111)
         a.set_xlabel("Distance (mm)")
         a.set_ylabel("Inductance (mV)")
-        self.maxX = self.maxY = 10
+        self.maxX = 10
+        self.maxY = settings.maxDAQoutput
         a.set_xlim([0,self.maxX])
         a.set_ylim([0,self.maxY])
         self.graph = a
@@ -348,20 +384,12 @@ class CalibrationWindow(Toplevel):
         self.graph.set_ylim([0, self.maxY])
 
         for s in range(settings.numsensors):
-            if len(self.results[s]) == 0:
+            xs, ys = self.results[s].getPointsSortedByDistance()
+            if len(xs) == 0:
                 continue
-
-            xs = []
-            ys = []
-
-            for result in self.results[s].values():
-                xs.append(result.dist)
-                ys.append(result.mean)
-
-            xrange = max(xs) - min(xs)
-
             self.graph.scatter(xs, ys, c=self.plotColours[s], label="Sensor " + str(s+1))
-            #todo plot here
+            if len(xs) > 1:
+                self.graph.plot(xs, ys, c=self.plotColours[s])
 
         self.graph.set_xlabel("Distance (mm)")
         self.graph.set_ylabel("Inductance (mV)")
@@ -384,20 +412,15 @@ class CalibrationWindow(Toplevel):
     def getParameters(self):
         sensors = []
         for i in range(settings.numsensors):
-            if len(self.results[i]) >= 2:
-                #print(list(self.results[i].items()))
-                #exit()
-                #results is a list of points for this sensor sorted by the average inductance
-                results = sorted(list(self.results[i].items()), key = lambda res: res[1].mean)
-                #'the other way around' as we later relate inductance to displacement
-                sensors.append([i] + [[y.mean,x] for (x, y) in results])
-        print(sensors)
+            xs, ys = self.results[i].getPointsSortedByVoltage()
+            if len(xs) >= 2:
+                sensors.append([i] + [[xs[i], ys[i]] for i in range(len(xs))])
         return sensors
 
     def fin(self):
         good = False  # there exists a sensor with enough readings
         for i in range(settings.numsensors):
-            if len(self.results[i]) > 1:
+            if len(self.results[i].distances) > 1:
                 good = True
                 break
         if not good:
@@ -410,7 +433,7 @@ class CalibrationWindow(Toplevel):
 
         bad = False  # there exists a sensor without enough readings
         for i in range(settings.numsensors):
-            if len(self.results[i]) < 2:
+            if len(self.results[i].distances) < 2:
                 bad = True
                 break
 
@@ -427,27 +450,9 @@ class CalibrationWindow(Toplevel):
                 self.exportParameters()
 
         self.finalParams = self.getParameters()
+        if self.outputWindow is not None and self.outputWindow.winfo_exists():
+            self.outputWindow.destroy()
         self.destroy()
-
-    """
-    def getSettings(self, num):
-        if len(self.results[num]) < 2:
-            return None
-        xs = []
-        ys = []
-        for r in self.results[num].values(): #'the other way around' as we later relate inductance to displacement
-            ys.append(r.dist)
-            xs.append(r.mean)
-
-        drange = np.ptp(ys)
-
-        if len(xs) < settings.linearpoints or drange < settings.linearrange: #linear regression
-            m, b, _, _, _ = scipy.stats.linregress(xs, ys)
-            return m, b
-        else:
-            p, _, _, _, _ = np.polyfit(xs, ys, 2, full=True)
-            return p
-    """
         
 if __name__ == '__main__':
     print("Run main.py")

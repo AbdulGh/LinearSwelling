@@ -22,9 +22,6 @@ class AnalysisGraph(Frame):
                 self.toolitems = [t for t in NavigationToolbar2TkAgg.toolitems if t[0] in ("Home", "Pan", "Zoom", "Save")]
                 NavigationToolbar2TkAgg.__init__(self, canvas, parent)
 
-            #def set_message(self, msg): #no mouse coordinates
-            #    pass
-
         self.toolbar = NavigationToolbar(canvas, self)
         self.toolbar.update()
         canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=True)
@@ -75,10 +72,7 @@ class AnalysisGraph(Frame):
             prefix = str(i) + " - " if len(runs) > 1 else ""
             for sensorname, sensor in run["sensors"].items():
                 xtics.append(prefix + sensorname)
-                m, b = sensor["params"]
-                final = sensor["pdisplacements"][-1]
-                initial = 1#(m * sensor["initial"] + b)
-                totalSwells.append(final - initial)
+                totalSwells.append(sensor["pdisplacements"][-1])
         if len(totalSwells) == 0:
             return
 

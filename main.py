@@ -13,14 +13,7 @@ class MainWindow(Tk):
         self.title("Swellometer")
         self.minsize(200,200)
         self.resizable(False, False)
-
         self.initwindow()
-
-        """
-        self.style = Style()
-        if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")"""
-
         self.mainloop()
 
     def initwindow(self):
@@ -36,9 +29,6 @@ class MainWindow(Tk):
             else:
                 self.deiconify()
 
-            #experimentWindow = measure.ExperimentWindow(self, m, b)
-            #self.wait_window(experimentWindow)
-
         launchCalibration = Button(self, text="Calibrate sensors", command=calibrationOption)
         launchCalibration.pack(pady=10)
 
@@ -46,6 +36,12 @@ class MainWindow(Tk):
             filename = filedialog.askopenfilename(parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
             if filename:
                 self.withdraw()
+
+                #ExperimentWindow params are of the form [[sensornum, [x0, y0]...]...]
+                #calibration files are of the form:
+                #sensornum
+                #x0 y0
+                #...
                 try:
                     with open(filename, "r") as f:
                         params = []

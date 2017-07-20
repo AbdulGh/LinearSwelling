@@ -17,11 +17,6 @@ class AnalysisWindow(Tk):
         self.initwindow()
         self.resizable(False, False)
 
-        """
-        self.style = Style()
-        if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")"""
-
     def initwindow(self):
         mainFrame = Frame(self)
         mainFrame.pack(fill=BOTH, padx=8, pady=8)
@@ -134,17 +129,12 @@ class AnalysisWindow(Tk):
 
     def runInfoDialog(self, run):
         t = Toplevel(self)
-
-        """
-        self.style = Style()
-        if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")"""
-
         frame = Frame(t)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + run["runname"]).pack(side=TOP)
         Label(frame, text="Time: " + time.strftime("%a, %d %b %Y %H:%M:%S", run["timeofrun"])).pack(side=TOP)
-        Label(frame, text="Notes:\n" + run["notes"], anchor=W, justify=LEFT, width=50, wraplength=300).pack(side=TOP)
+        Label(frame, text="Notes:", anchor=W, justify=LEFT, width=50, wraplength=300).pack(side=TOP)
+        Label(frame, text=run["notes"], justify=LEFT, wraplength=300, borderwidth=1, relief="sunken").pack(side=TOP, fill=X, expand=True)
 
         listbox = Listbox(frame, height=0)
 
@@ -155,7 +145,7 @@ class AnalysisWindow(Tk):
             pointed = run["sensors"][listbox.selection_get()]
             self.sensorInfoDialog(pointed)
 
-        listbox.pack(side=TOP, fill=X, expand=True)
+        listbox.pack(side=TOP, fill=X, expand=True, pady=4)
         listbox.bind("<Double-1>", listDoubleClick)
 
         Button(frame, text="OK", command=t.destroy).pack(side=RIGHT, pady=(4,0))
@@ -164,12 +154,6 @@ class AnalysisWindow(Tk):
 
     def sensorInfoDialog(self, sensor):
         t = Toplevel(self)
-
-        """
-        self.style = Style()
-        if "clam" in self.style.theme_names():
-            self.style.theme_use("clam")"""
-
         frame = Frame(t)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + sensor["name"]).pack(side=TOP)
@@ -268,11 +252,8 @@ class AnalysisWindow(Tk):
                         name = " ".join(line[1:-1])
                         names.append(name)
                         sensor["name"] = name
-                        print("here")
                         sensor["initialThickness"] = float(f.readline().split()[3])
-                        print("here")
                         sensor["initialDisplacement"] = float(f.readline().split()[3])
-                        print("here")
                         sensor["times"] = []
                         sensor["pdisplacements"] = []
                         sensor["voltages"] = []
