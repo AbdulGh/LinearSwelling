@@ -40,7 +40,7 @@ class AnalysisWindow(Tk):
         importList.column("points", minwidth=10, width=100)
         importList.pack(side=LEFT, fill=BOTH, expand=True)
 
-        self.indexPointers = {} #points to which object to display on double click
+        self.indexPointers = {} #treeview iid -> sensor/run
         def importListDoubleClick(event):
             item = importList.identify('item',event.x,event.y)
             pointed = self.indexPointers[item]
@@ -193,8 +193,8 @@ class AnalysisWindow(Tk):
         Label(paddingFrame, text="Import from '" + os.path.basename(filename) + "'").pack(side=TOP)
         self.checkboxVars = [IntVar() for _ in names]
         for n in range(len(names)):
-            self.checkboxVars[n].set(1)
             Checkbutton(paddingFrame, text=names[n], variable=self.checkboxVars[n]).pack(side=TOP, pady=4)
+            self.checkboxVars[n].set(1)
 
         t.resizable(False, False)
         Button(paddingFrame, text="Import", command=t.destroy).pack(side=TOP)
@@ -239,44 +239,33 @@ class AnalysisWindow(Tk):
                             else:
                                 break
                         notes += c
-                    f.readline() #'Time(m) - Displacement(%) - Voltage(mV)'
+                    numsensors = int(f.readline().split()[2])
+                    f.readline() #Sensor names:
+                    sensors = [{"name": f.readline()[:-1], "times":[], "pdisplacements":[], "voltages":[]} for _ in range(numsensors)]
+                    f.readline() #"Initial thicknesses(mm) - Initial displacements(mm):
+                    for i in range(numsensors):
+                        initialThickness, _, initialDisplacement = f.readline().split()
+                        sensors[i]["initialThickness"] = float(initialThickness)
+                        sensors[i]["initialDisplacement"] = float(initialDisplacement[:-1])
+                    f.readline() #'Time(m) - Displacement(%) - Voltage(V)'
                     f.readline() #newline
-                    names = []
-                    sensors = []
+
                     line = f.readline()
-                    while line != "" and line != "\n":
-                        line = line.split()
-                        if len(line) < 3 or line[0] != "***":
-                            raise IOError("Invalid file")
-                        sensor = {}
-                        name = " ".join(line[1:-1])
-                        names.append(name)
-                        sensor["name"] = name
-                        sensor["initialThickness"] = float(f.readline().split()[3])
-                        sensor["initialDisplacement"] = float(f.readline().split()[3])
-                        sensor["times"] = []
-                        sensor["pdisplacements"] = []
-                        sensor["voltages"] = []
-                        line = f.readline()
-                        while line != "" and line != "\n":
-                            ar = line.split()
-                            if len(ar) != 3:
-                                raise IOError("Invalid file")
-                            sensor["times"].append(float(ar[0]))
-                            sensor["pdisplacements"].append(float(ar[1]))
-                            sensor["voltages"].append(float(ar[2]))
-                            line = f.readline()
-                        sensors.append(sensor)
+                    while line:
+                        data = line.split()
+                        for i in range(0, numsensors):
+                            index = i*3
+                            sensors[i]["times"].append(float(data[index]))
+                            sensors[i]["pdisplacements"].append(float(data[index+1]))
+                            sensors[i]["voltages"].append(float(data[index+2]))
                         line = f.readline()
 
-                    if len(names) == 0:
-                        raise IOError("Invalid file")
-
-                    toimport = self.chooseSensorsDialogue(names, filename)
-                    sensors = {names[i]:sensors[i] for i in range(len(names)) if toimport[i]}
+                    toimport = self.chooseSensorsDialogue([sensors[i]["name"] for i in range(numsensors)], filename)
+                    sensors = {sensors[i]["name"]:sensors[i] for i in range(numsensors) if toimport[i]}
                     runs.append({"runname": runname, "timeofrun": timeofrun, "rate":rate, "sensors": sensors, "notes":notes})
             except Exception as e:
                 messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
+                raise e
 
         for run in runs:
             rootid = self.importList.insert("", "end", values=(str(len(self.loadedRuns) + 1) + " - " + run["runname"], ""), open=True, tags=("run"))

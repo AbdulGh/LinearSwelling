@@ -15,13 +15,11 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
-#daq 6210
-
 class CalibrationWindow(Toplevel):
-    def __init__(self, master=None):
+    def __init__(self, master, daqconnection):
         Toplevel.__init__(self, master)
         self.title("Swellometer calibration")
-        self.connection = tools.DAQInput()
+        self.connection = daqconnection
         self.resizable(False, False)
 
         #used by tkinter to update labels
@@ -71,6 +69,7 @@ class CalibrationWindow(Toplevel):
         inputFrame.grid(row=0, column=0, rowspan=3, columnspan=3)
 
         self.sensorEntries = []
+        #used to check which sensors are enabled
         self.sensorCheckedVars = []
         self.checkbuttons = []
 
@@ -159,10 +158,10 @@ class CalibrationWindow(Toplevel):
         titleFont = font.Font(family='Helvetica', size=10, weight='bold')
         resList.tag_configure("title", font=titleFont)
 
-        self.sensorTreeviewIDs = []
+        self.sensorTreeviewIDs = [] #sensor number -> treeview iid
         for i in range(settings.numsensors):
-            id = resList.insert("", "end", i, values=("Sensor" + str(i + 1)), open=True, tags=("title",))
-            self.sensorTreeviewIDs.append(id)
+            iid = resList.insert("", "end", i, values=("Sensor" + str(i + 1)), open=True, tags=("title",))
+            self.sensorTreeviewIDs.append(iid)
         resList.pack(side=LEFT, fill=BOTH, expand=True)
         scrollbar.config(command=resList.yview)
 
@@ -193,9 +192,6 @@ class CalibrationWindow(Toplevel):
             self.mean = sum(inductionList) / len(inductionList)
             self.SD = scipy.std(inductionList)
             self.iid = None
-
-        def toStr(self):
-            return str(self.dist) + "mm    -    " + str(round(self.mean,3)) + "mV    -    SD " + str(round(self.SD, 3)) + "mV"
 
         def export(self):
             string = "Distance: " + str(self.dist) + "mm\n"
@@ -271,6 +267,7 @@ class CalibrationWindow(Toplevel):
             f.close()
 
     def enableSensors(self, enable=True):
+        # cancalBtn is enabled <-> everything else is disabled
         (setting, antisetting) = (NORMAL, DISABLED) if enable else (DISABLED, NORMAL)
         self.cancelBtn.config(state=antisetting)
         self.startBtn.config(state=setting)
@@ -285,7 +282,7 @@ class CalibrationWindow(Toplevel):
             self.switchEntry()
 
     def startReadings(self):
-        toRecord = [] #some sensors will be disabled (via checkbuttons)
+        toRecord = [] #list of enabled sensor numbers
         distances = []
         for i in range(settings.numsensors):
             if self.sensorCheckedVars[i].get() == 1:
@@ -308,34 +305,31 @@ class CalibrationWindow(Toplevel):
 
         rate = int(1000/rate)
         totalNo = int(totalNo)
-        currentReadings = [[] for i in range(len(toRecord))]
+        currentReadings = [[] for i in range(len(toRecord))] #lists of intermediate results for this reading (averaged later)
         self.curNumTaken.config(text="Readings taken: 0/" + str(totalNo))
 
-        def addResults():
+        def addResults(): #called when a single averaged reading is to be added
             self.parametersExported = False
             self.stopReadings()
             for i in range(len(toRecord)):
                 sensor = toRecord[i]
                 distance = distances[i]
-                
+
+                #check if the graph fits everything
                 if distance > self.maxX:
                     self.maxX = distance + 1
-                
-                res = self.results[sensor].insert(distance, currentReadings[i])
-                
+                res = self.results[sensor].insert(distance, currentReadings[i]) #hanles merging, averaging etc.
                 if res.mean > self.maxY:
                     self.maxY = res.mean + 1
 
                 res.iid = self.resList.insert(self.sensorTreeviewIDs[sensor], "end", values=(distance, res.mean, round(res.SD, 3)))
                 self.resListPointers[res.iid] = res
-                
                 self.sensorEntries[sensor].delete(0, "end")
                 
-
             self.replot()
 
         def takeSingleReading():
-            if len(currentReadings[0]) == totalNo:
+            if len(currentReadings[0]) == totalNo: #done
                 addResults()
                 self.stopReadings()
                 return
@@ -407,6 +401,7 @@ class CalibrationWindow(Toplevel):
                 f.write(str(sensor[0]) + "\n")
                 for x, y in sensor[1:]:
                     f.write (str(x) + " " + str(y) + "\n")
+        self.parametersExported = True
 
     #returns [[sensornum, [x0, y0]...]...]
     def getParameters(self):

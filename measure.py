@@ -4,6 +4,7 @@ from tkinter import filedialog
 from tkinter.ttk import *
 import tools
 import time
+import os
 
 import matplotlib
 matplotlib.use("TkAgg")
@@ -12,7 +13,7 @@ import matplotlib.animation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class ExperimentWindow(Toplevel):
-    def __init__(self, master, sensorsettings):
+    def __init__(self, master, sensorsettings, daqconnection):
         Toplevel.__init__(self, master)
         self.paramList = []
         self.sensors = []
@@ -24,12 +25,15 @@ class ExperimentWindow(Toplevel):
                 raise ValueError("Bad input")
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
         self.initialThicknesses = [2 for _ in range(len(self.sensors))]
-        self.currentPercentageSwelling = None #percentage swelling of ongoing run
-        self.exported = False
+        self.currentPercentageSwelling = None #percentage swelling of ongoing run (becomes a list of lists, one for each sensor)
+        self.currentVoltages = None 
+        self.actualTimes = None
+        self.lastSaveTime = None #last time we dumped into a file
+        self.nextUnsavedIndex = None #where we have saved to
         self.animation = None #matplotlib graph animation
         self.title("Swellometer measurement")
         self.resizable(False, False)
-        self.connection = tools.DAQInput()
+        self.connection = daqconnection
         self.outputWindow = None
 
         menubar = Menu(self)
@@ -49,6 +53,7 @@ class ExperimentWindow(Toplevel):
         self.config(menu=menubar)
         self.protocol('WM_DELETE_WINDOW', self.fin)
         self.name = time.ctime()
+        self.filename = time.strftime("%d-%m-%Y")
         self.initwindow()
         self.notes = ""
         self.setupTest()
@@ -60,10 +65,11 @@ class ExperimentWindow(Toplevel):
     def clearResults(self):
         if messagebox.askyesno("Clear Results", "Are you sure you want to reset the test?", parent=self):
             self.stopRecording()
-            #self.sensorNames = ["Sensor " + str(i + 1) for i in self.sensors]
-            #self.initialThicknesses = [2 for _ in range(len(self.sensors))]
             self.currentPercentageSwelling = None
-            self.exported = False
+            self.currentVoltages = None
+            self.actualTimes = None
+            self.lastSaveTime = None
+            self.nextUnsavedIndex = None
             self.animation = None
             self.graph.clear()
             self.graph.set_xlabel("Time (m)")
@@ -92,6 +98,11 @@ class ExperimentWindow(Toplevel):
         nameEntry = Entry(nameFrame)
         nameEntry.insert(0, self.name)
         nameEntry.pack(side=LEFT, padx=(4,0), fill=X, expand=True)
+        Label(nameFrame, text="Filename: ").pack(side=LEFT, padx=(4,0))
+        filenameEntry = Entry(nameFrame)
+        filenameEntry.insert(0, self.filename)
+        filenameEntry.pack(side=LEFT, padx=(4,0), fill=X, expand=True)
+        filenameEntry.config(state = NORMAL if self.currentPercentageSwelling is None else DISABLED)
 
         notesFrame = Frame(fr)
         notesFrame.pack(side=TOP, fill=BOTH, expand=True, pady=(4,0))
@@ -105,6 +116,14 @@ class ExperimentWindow(Toplevel):
             if name == "":
                 messagebox.showerror("Error", "Test name cannot be empty.", parent=self)
                 return
+
+            if self.lastSaveTime is None and os.path.isfile(filenameEntry.get() + ".data"):
+                result = messagebox.askquestion("File already exists", "Overwrite '" + filenameEntry.get() + ".data'?", icon='warning', parent=self)
+                if result == "no":
+                    return
+                else:
+                    open(filenameEntry.get() + ".data", 'w').close() #erase it
+
             self.name = name
             self.notes = notes.get("1.0", END)
             t.destroy()
@@ -115,7 +134,7 @@ class ExperimentWindow(Toplevel):
         t.grab_set()
         self.wait_window(t)
 
-    def setupSensors(self):
+    def setupSensors(self): #todo investigate why this clears the graph
         t = Toplevel(self)
         t.geometry("+%d+%d" % (self.winfo_rootx() + 80, self.winfo_rooty() + 80))
         t.title("Sensors")
@@ -123,8 +142,8 @@ class ExperimentWindow(Toplevel):
         fr.pack(fill=BOTH, expand=True, padx=8, pady=8)
         nameentries = []
         thicknessentries = []
-        Label(fr, text="Sensor Name").grid(row=0, column=0, padx=(0,4))
-        Label(fr, text="Initial thickness(mm)").grid(row=0, column=1, padx=(4,0))
+        Label(fr, text="Sensor Name: ").grid(row=0, column=0, padx=(0,4))
+        Label(fr, text="Initial thickness(mm): ").grid(row=0, column=1, padx=(4,0))
         stat = NORMAL if self.currentPercentageSwelling is None else DISABLED #disallow changes to initial thicknesses if the test has started - we calculate relative swell
         for i in range(len(self.sensors)):
             e = Entry(fr)
@@ -140,7 +159,7 @@ class ExperimentWindow(Toplevel):
         def updateSettings():
             values = [entry.get() for entry in nameentries]
             #check sensors have unique names
-            #could be done asymptotically faster w/ a map or sorting but we have like 4 sensors
+            #could be done asymptotically faster w/ sorting or a map but we have like 4 sensors
             for i in range(len(values)):
                 for j in range(i+1, len(values)):
                     if values[i] == values[j]:
@@ -217,25 +236,39 @@ class ExperimentWindow(Toplevel):
             messagebox.showerror("No readings", "Please take some readings first.", parent=self)
             return
 
-        f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".data", filetypes=[("Data File", "*.data")])
-        if f is not None:
-            f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nNotes:\n")
-            notes = self.notes.translate(str.maketrans({"\\": r"\\"}))
-            f.write(notes + "\n\\\n")
-            f.write("Time(m) - Displacement(%) - Voltage(mV)\n")
-            for s in range(len(self.currentPercentageSwelling)):
-                string = "\n*** " + self.sensorNames[s] + " ***\n"
-                string += "Initial thickness (mm): " + str(self.initialThicknesses[s]) + "\n"
-                string += "Initial displacement (mm): " + str(self.initialReadings[s]) + "\n"
-                for i in range(len(self.currentPercentageSwelling[s])):
-                    string += str(self.actualTimes[s][i]) + " " + str(self.currentPercentageSwelling[s][i]) + " " + str(self.currentVoltages[s][i]) + "\n"
-                f.write(string)
-            f.close()
-            self.exported = True
+        if self.nextUnsavedIndex >= len(self.currentPercentageSwelling[0]):
+            return #all saved
+
+        with open(self.filename + ".data", "a+") as f:
+            f.seek(0, os.SEEK_END)
+            #check if file is empty
+            if (f.tell() == 0):
+                f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nNotes:\n")
+                notes = self.notes.translate(str.maketrans({"\\": r"\\"}))
+                f.write(notes + "\n\\\n")
+                f.write("# sensors: " + str(len(self.sensors)) + "\n")
+                f.write("Sensor names:\n")
+                for name in self.sensorNames:
+                    f.write(name + "\n")
+                f.write("Initial thicknesses(mm) - Initial displacements(mm):\n")
+                for i in range(len(self.sensors)):
+                    f.write(str(self.initialThicknesses[i]) + " - " + str(self.initialReadings[i]) + "\n")
+                f.write("For each sensor: Time(m) - Displacement(%) - Voltage(V)\n")
+
+            for pointIndex in range(self.nextUnsavedIndex + 1, len(self.currentPercentageSwelling[0])):
+                for sensorIndex in range(len(self.sensors)):
+                    f.write(str(self.actualTimes[sensorIndex][pointIndex]) + " " + str(self.currentPercentageSwelling[sensorIndex][pointIndex])
+                     + " " + str(self.currentVoltages[sensorIndex][pointIndex]) + " ")
+                f.write("\n")
+
+        self.nextUnsavedIndex = len(self.currentPercentageSwelling[0])
+
 
     def stopRecording(self):
         if self.animation is None:
             return
+
+        self.exportReadings()
 
         self.animation.event_source.stop()
         self.animation = None
@@ -249,20 +282,17 @@ class ExperimentWindow(Toplevel):
         self.progressBar["value"] = 0
 
     def startRecording(self):
-        if self.currentPercentageSwelling is not None and not self.exported:
+        if self.currentPercentageSwelling is not None:
             result = messagebox.askquestion("Results not exported", "Discard current readings?", icon='warning', parent=self)
             if result == "no":
                 return
 
-        self.exported = False
-
         t = tools.getFloatFromEntry(self, self.timeEntry, "Duration", mini=0)
-        rate = tools.getFloatFromEntry(self, self.rateEntry, "Readings/minute", mini=0.01, maxi=120)
+        rate = tools.getFloatFromEntry(self, self.rateEntry, "Readings/minute", mini=0.01, maxi=130)
 
-        if time is None or rate is None:
+        if t is None or rate is None:
             return
 
-        totalNo = int(t * rate) + 1
         rate = self.lastrate = 60000/rate
 
         self.graph.set_xlim([0, t])
@@ -290,15 +320,20 @@ class ExperimentWindow(Toplevel):
         self.currentPercentageSwelling = [[] for _ in range(len(self.sensors))]
         self.currentVoltages = [[] for _ in range(len(self.sensors))]
         self.actualTimes = [[] for _ in range(len(self.sensors))]
-        self.progressBar.config(maximum=totalNo)
+        self.progressBar.config(maximum=t)
 
         def takeSingleResult(_):
-            prog = len(self.currentPercentageSwelling[0])
-            if prog >= totalNo:
+            moment = time.time()
+            if (moment - self.lastSaveTime) > 300: #save everything
+                self.exportReadings()
+                self.lastSaveTime = moment
+
+            mins = (moment - self.lastStartTime) / 60
+            if mins >= t:
                 self.stopRecording()
                 return
-            self.progressBar["value"] = prog
-            self.progressLabel.config(text = str(round(prog/totalNo * 100, 2)) + "%")
+            self.progressBar["value"] = mins
+            self.progressLabel.config(text = str(round(mins/t * 100, 2)) + "%")
             for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacementVoltage(i)
                 d = self.initialReadings[i] - d
@@ -314,6 +349,8 @@ class ExperimentWindow(Toplevel):
             return self.plots
 
         self.lastStartTime = time.time()
+        self.lastSaveTime = self.lastStartTime
+        self.nextUnsavedIndex = 0
         self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=True)
         self.canvas.show()
 
@@ -361,18 +398,14 @@ class ExperimentWindow(Toplevel):
                 return
             self.stopRecording()
 
-        if self.currentPercentageSwelling is not None and not self.exported:
-            result = messagebox.askquestion("Results not exported", "Do you want to save the current results?",
-                                                icon='warning', parent=self, type=messagebox.YESNOCANCEL)
-            if result == "cancel":
-                return
-            if result == "yes":
-                self.exportReadings()
+        if self.currentPercentageSwelling is not None:
+            self.exportReadings()
 
         if self.outputWindow is not None and self.outputWindow.winfo_exists():
             self.outputWindow.destroy()
         self.destroy()
 
+#points is a list of coordinates - [[x0, y0]...]
 #xs must be sorted in ascending order!
 def piecewiseLinearInterpolate(points, xval):    
     if len(points) < 2:
@@ -382,7 +415,7 @@ def piecewiseLinearInterpolate(points, xval):
         x1, y1 = points[0]
         x2, y2 = points[1]
         m = (y2 - y1) / (x2 - x1)
-        return y1 - m * (x2 - xval)
+        return y1 - m * (x1 - xval)
     for i in range(len(points) - 1):
         if xval > points[i+1][0]:
             continue

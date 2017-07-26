@@ -9,8 +9,7 @@ try:
     from PyDAQmx.DAQmxFunctions import *
     from PyDAQmx.DAQmxConstants import *
 except Exception as e:
-    print("Could not import PyDAQmx. No data can be recieved from the card.") #todo make this fatal
-    print("Please make sure PyDAQmx and NI-DAQ are installed.")
+    pass #handled later
         
 def getFloatFromEntry(master, entry, name, mini=None, maxi=None, forceInt=False):
         s = entry.get()
@@ -31,17 +30,19 @@ class DAQInput(): #todo add close functionality
     def __init__(self):
         self.pydaqimported = "PyDAQmx" in sys.modules
 
-        if self.pydaqimported:
-            #DAQmxResetDevice("Dev1")
+        if "PyDAQmx" in sys.modules:
+            #DAQmxResetDevice("settings.devicename")
             taskHandles = [TaskHandle(0) for _ in range(settings.numsensors)]
             for i in range(settings.numsensors):
                 DAQmxCreateTask("",byref(taskHandles[i]))
-                DAQmxCreateAIVoltageChan(taskHandles[i], "Dev1/ai" + str(i+1), "", DAQmx_Val_RSE,
+                DAQmxCreateAIVoltageChan(taskHandles[i], settings.devicename + "/ai" + str(i+1), "", DAQmx_Val_RSE,
                                      0, settings.maxDAQoutput, DAQmx_Val_Volts, None)
                 self.taskHandles = taskHandles
+        #else:
+        #    raise ModuleNotFoundError("Could not import PyDAQmx")
 
     def read(self,i):
-        if self.pydaqimported:
+        try:
             taskHandle = self.taskHandles[i]                    
             DAQmxStartTask(taskHandle)
             data = numpy.zeros((1,), dtype=numpy.float64)
@@ -49,8 +50,14 @@ class DAQInput(): #todo add close functionality
             DAQmxReadAnalogF64(taskHandle, 1, settings.maxDAQoutput, DAQmx_Val_GroupByChannel, data, 1, byref(read), None)
             DAQmxStopTask(taskHandle)
             return data[0]
-        else:
-            return random.randint(0,10)
+        except Exception:
+            return random.randint(0, 10) #todo delete this
+
+    def close(self):
+        for taskHandle in self.taskHandles:
+            DAQmxStopTask(taskHandle)
+            DAQmxClearTask(taskHandle)
+        
 
 from tkinter import *
 from tkinter.ttk import *
@@ -63,12 +70,9 @@ import matplotlib.animation
 from numpy import arange
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 class DAQRawOutputDialog(Toplevel):
-    def __init__(self, master=None, daqinput=None):
+    def __init__(self, master, daqinput):
         Toplevel.__init__(self, master)
-        if master is not None:
-            self.geometry("+%d+%d" % (master.winfo_rootx() + 80, master.winfo_rooty() + 80))
-        if daqinput is None:
-            daqinput = DAQInput()
+        self.geometry("+%d+%d" % (master.winfo_rootx() + 80, master.winfo_rooty() + 80))
         self.title("Raw DAQ output")
 
         mainframe = Frame(self)
@@ -79,7 +83,7 @@ class DAQRawOutputDialog(Toplevel):
         f.subplots_adjust(hspace=.3)
         dimension = ceil(sqrt(settings.numsensors)) #number of plots on one side of the square grid
         self.sensoraxs = [f.add_subplot(2,2,i+1) for i in range(settings.numsensors)]
-        numtodisplay = 30 # number of points on the x-axis
+        numtodisplay = 30 #number of points on the x-axis
         initialreadings = [daqinput.read(s) for s in range(settings.numsensors)]
         self.sensorreadings = [deque([initialreadings[s] for _ in range(numtodisplay)]) for s in range(settings.numsensors)]
         xaxis = arange(numtodisplay)
