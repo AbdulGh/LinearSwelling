@@ -26,7 +26,7 @@ def getFloatFromEntry(master, entry, name, mini=None, maxi=None, forceInt=False)
         except ValueError:
             messagebox.showerror("Error", "Value for '" + name + "' is not numerical.", parent=master)
 
-class DAQInput(): #todo add close functionality
+class DAQInput():
     def __init__(self):
         self.pydaqimported = "PyDAQmx" in sys.modules
 
@@ -38,7 +38,7 @@ class DAQInput(): #todo add close functionality
                 DAQmxCreateAIVoltageChan(taskHandles[i], settings.devicename + "/ai" + str(i+1), "", DAQmx_Val_RSE,
                                      0, settings.maxDAQoutput, DAQmx_Val_Volts, None)
                 self.taskHandles = taskHandles
-        #else:
+        #else: todo
         #    raise ModuleNotFoundError("Could not import PyDAQmx")
 
     def read(self,i):
@@ -51,7 +51,7 @@ class DAQInput(): #todo add close functionality
             DAQmxStopTask(taskHandle)
             return data[0]
         except Exception:
-            return random.randint(0, 10) #todo delete this
+            return random.randint(0, 10) #todo replace this with a popup
 
     def close(self):
         for taskHandle in self.taskHandles:
@@ -130,7 +130,7 @@ class DAQRawOutputDialog(Toplevel):
             return self.sensorplots
 
         self.animation = matplotlib.animation.FuncAnimation(f, takeReading, interval=60, blit=True)
-        Button(mainframe, text="Done", command=self.destroy).pack(side=RIGHT)
+        Button(mainframe, text="Done", command=self.destroy).pack(side=RIGHT, pady=(4,0))
         self.resizable(False, False)
         
 if __name__ == '__main__':

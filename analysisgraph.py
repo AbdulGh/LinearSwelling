@@ -34,6 +34,10 @@ class AnalysisGraph(Frame):
         self.graph.set_xlabel("Time (m)")
         self.graph.set_ylabel("Displacement (%)")
 
+        if len(runs) == 0:
+            self.canvas.draw()
+            return
+
         for i in range(len(runs)):
             run = runs[i]
             prefix = str(i) + " - " if len(runs) > 1 else ""
@@ -50,6 +54,10 @@ class AnalysisGraph(Frame):
         self.graph.set_xlabel("Time (m)")
         self.graph.set_ylabel("Voltage (mV)")
 
+        if len(runs) == 0:
+            self.canvas.draw()
+            return
+
         for i in range(len(runs)):
             run = runs[i]
             prefix = str(i) + " - " if len(runs) > 1 else ""
@@ -60,6 +68,36 @@ class AnalysisGraph(Frame):
         self.graph.autoscale(True)
         self.canvas.draw()
         self.toolbar.update()
+
+    def plotAveragePercentageSwells(self, runs):
+        self.graph.clear()
+        self.graph.set_xlabel("Time (m)")
+        self.graph.set_ylabel("Average swell (%)")
+
+        #get number of readings
+        if len(runs) == 0:
+            self.canvas.draw()
+            return
+
+        for run in runs:
+            numvalues = len(next(iter(run["sensors"].values()))["pdisplacements"])
+            numsensors = len(run["sensors"])
+
+            sumDisplacements = np.zeros(numvalues)
+            sumTimes = np.zeros(numvalues)
+            for _, sensor in run["sensors"].items():
+                sumDisplacements += np.array(sensor["pdisplacements"])
+                sumTimes += np.array(sensor["times"])
+            sumDisplacements /= numsensors
+            sumTimes /= numsensors
+            self.graph.plot(sumTimes, sumDisplacements, label=run["runname"])
+
+        h, l = self.graph.get_legend_handles_labels()
+        self.graph.legend(h, l, loc="upper left")
+        self.graph.autoscale(True)
+        self.canvas.draw()
+        self.toolbar.update()
+
 
     def plotTotalSwells(self, runs):
         self.graph.clear()
@@ -88,6 +126,10 @@ class AnalysisGraph(Frame):
         self.graph.clear()
         self.graph.set_ylabel("Rate of swelling (%/m)")
         self.graph.set_xlabel("Time (m)")
+
+        if len(runs) == 0:
+            self.canvas.draw()
+            return
 
         for i in range(len(runs)):
             run = runs[i]

@@ -13,7 +13,7 @@ class AnalysisWindow(Tk):
         self.title("Swellometer Analysis")
         self.loadedRuns = {} #(runname, runtime) -> (listID, runObject)
         self.graphmode = StringVar(self)
-        self.graphmode.set("Displacement")
+        self.graphmode.set("Percentage Displacement")
         self.initwindow()
         self.resizable(False, False)
 
@@ -89,25 +89,27 @@ class AnalysisWindow(Tk):
 
         Button(leftFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
 
-        OptionMenu(leftFrame, self.graphmode, "Percentage Displacement", "Percentage Displacement", "Voltages", "Swelling Rate", "Total Swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
+        OptionMenu(leftFrame, self.graphmode, "Percentage Displacement", "Percentage Displacement", "Average Percentage Displacement", "Voltages", "Swelling Rate", "Total Swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
         self.setGraphMode()
 
         self.mainloop()
 
     def setGraphMode(self, _=None): #throw away event parameter from optionmenu callback
+        runs = [run for _, (_, run) in self.loadedRuns.items()]
         selection = self.graphmode.get()
-        if selection == "None":
-            self.graph.clear()
+        if selection == "Percentage Displacement":
+            self.graph.plotDistances(runs)
+        elif selection == "Voltages":
+            self.graph.plotVoltages(runs)
+        elif selection == "Total Swell":
+            self.graph.plotTotalSwells(runs)
+        elif selection == "Swelling Rate":
+            self.graph.plotRatePercentageSwell(runs)
+        elif selection == "Average Percentage Displacement":
+            self.graph.plotAveragePercentageSwells(runs)
         else:
-            runs = [run for _, (_, run) in self.loadedRuns.items()]
-            if selection == "Percentage Displacement":
-                self.graph.plotDistances(runs)
-            elif selection == "Voltages":
-                self.graph.plotVoltages(runs)
-            elif selection == "Total Swell":
-                self.graph.plotTotalSwells(runs)
-            elif selection == "Swelling Rate":
-                self.graph.plotRatePercentageSwell(runs)
+            self.graph.clear()
+            self.graph.draw()
 
     def deleteObject(self, iid, warn=True):
         pointed = self.indexPointers[iid]
@@ -191,10 +193,12 @@ class AnalysisWindow(Tk):
         paddingFrame.pack(fill=BOTH, expand=True, padx = 8, pady = 8)
         t.title("Import sensor data")
         Label(paddingFrame, text="Import from '" + os.path.basename(filename) + "'").pack(side=TOP)
-        self.checkboxVars = [IntVar() for _ in names]
+        self.checkboxVars = [IntVar(value=1) for _ in names]
         for n in range(len(names)):
-            Checkbutton(paddingFrame, text=names[n], variable=self.checkboxVars[n]).pack(side=TOP, pady=4)
-            self.checkboxVars[n].set(1)
+            #self.checkboxVars[n].set(1)
+            c = Checkbutton(paddingFrame, text=names[n], variable=self.checkboxVars[n])
+            c.state(['selected'])
+            c.pack(side=TOP, pady=4)
 
         t.resizable(False, False)
         Button(paddingFrame, text="Import", command=t.destroy).pack(side=TOP)

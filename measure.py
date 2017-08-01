@@ -2,6 +2,7 @@ from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
 from tkinter.ttk import *
+import numpy as np
 import tools
 import time
 import os
@@ -19,10 +20,11 @@ class ExperimentWindow(Toplevel):
         self.sensors = []
         for sensor in sensorsettings:
             try:
-                self.sensors.append(sensor[0])
-                self.paramList.append(sensor[1:])
-            except Exception:
-                raise ValueError("Bad input")
+                self.sensors.append(int(sensor[0]))
+                self.paramList.append(np.poly1d([float(x) for x in sensor[1:]]))
+            except Exception as e:
+                raise e
+                #raise ValueError("Bad input")
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
         self.initialThicknesses = [2 for _ in range(len(self.sensors))]
         self.currentPercentageSwelling = None #percentage swelling of ongoing run (becomes a list of lists, one for each sensor)
@@ -364,7 +366,7 @@ class ExperimentWindow(Toplevel):
     def getCurrentDisplacementVoltage(self, i):
         points = self.paramList[i]
         v = self.connection.read(self.sensors[i])
-        return  [piecewiseLinearInterpolate(points, v), v]
+        return  [self.paramList[i](v), v]
 
     def initGraphFrame(self, fr):
         f = plt.figure(figsize=(8, 5), dpi=100)
@@ -372,7 +374,7 @@ class ExperimentWindow(Toplevel):
         a = f.add_subplot(111)
         a.set_xlabel("Time (m)")
         a.set_ylabel("Relative swell (%)")
-        self.maxY = 300
+        self.maxY = 150
         a.set_xlim([0,180])
         a.set_ylim([95,self.maxY])
         self.plots = []
@@ -405,6 +407,7 @@ class ExperimentWindow(Toplevel):
             self.outputWindow.destroy()
         self.destroy()
 
+"""
 #points is a list of coordinates - [[x0, y0]...]
 #xs must be sorted in ascending order!
 def piecewiseLinearInterpolate(points, xval):    
@@ -429,6 +432,7 @@ def piecewiseLinearInterpolate(points, xval):
     x2, y2 = points[-1]
     m = (y2 - y1) / (x2 - x1)
     return y2 + m * (xval - x2)
+"""
 
 if __name__ == '__main__':
     print("Run main.py")

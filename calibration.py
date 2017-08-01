@@ -3,13 +3,12 @@ from tkinter import messagebox
 from tkinter import filedialog
 from tkinter.ttk import *
 from tkinter import font
-#import numpy as np
+import numpy as np
 import scipy.stats
 import tools
 import matplotlib
 import datetime
 import settings
-from numpy import argsort
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -60,10 +59,10 @@ class CalibrationWindow(Toplevel):
 
     def initwindow(self):
         mainFrame = Frame(self)
-        mainFrame.pack(side=TOP, fill=BOTH, expand=True)
+        mainFrame.pack(side=TOP, fill=BOTH, expand=True, padx=8, pady=(8,4))
 
         leftFrame = Frame(mainFrame)
-        leftFrame.pack(side=LEFT, fill=BOTH, expand=True, padx=8, pady=8)
+        leftFrame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0,8))
 
         inputFrame = Frame(leftFrame)
         inputFrame.grid(row=0, column=0, rowspan=3, columnspan=3)
@@ -115,7 +114,7 @@ class CalibrationWindow(Toplevel):
         curNumTaken.grid(row=1, column=0, columnspan=2, pady=(2,10))
         self.curNumTaken = curNumTaken
 
-        listFrame = Frame(leftFrame, width=50)
+        listFrame = Frame(leftFrame, width=50, borderwidth=1, relief=GROOVE)
         listFrame.grid(row=10, rowspan=13, column=0, columnspan=3, sticky=N + S + W + E)
         leftFrame.rowconfigure(10, weight=1)
         scrollbar = Scrollbar(listFrame)
@@ -124,9 +123,9 @@ class CalibrationWindow(Toplevel):
         resList["show"] = "headings"
         resList.heading("distance", text="Distance (mm)")
         resList.column("distance", minwidth=10, width=50)
-        resList.heading("mean", text="Mean (mV)")
+        resList.heading("mean", text="Mean (V)")
         resList.column("mean", minwidth=10, width=50)
-        resList.heading("std", text="Std.Dev. (mV)")
+        resList.heading("std", text="Std.Dev. (V)")
         resList.column("std", minwidth=10, width=50)
 
         class ResListPopup(Menu):
@@ -160,7 +159,7 @@ class CalibrationWindow(Toplevel):
 
         self.sensorTreeviewIDs = [] #sensor number -> treeview iid
         for i in range(settings.numsensors):
-            iid = resList.insert("", "end", i, values=("Sensor" + str(i + 1)), open=True, tags=("title",))
+            iid = resList.insert("", "end", i, values=("Sensor " + str(i + 1)), open=True, tags=("title",))
             self.sensorTreeviewIDs.append(iid)
         resList.pack(side=LEFT, fill=BOTH, expand=True)
         scrollbar.config(command=resList.yview)
@@ -169,12 +168,12 @@ class CalibrationWindow(Toplevel):
         self.resList = resList
 
         graph = self.initGraphFrame(mainFrame)
-        graph.pack(side=RIGHT, fill=BOTH, expand=True, padx=8, pady=8)
+        graph.pack(side=RIGHT, fill=BOTH, expand=True, padx=(0,2))
 
         bottomBtnFrame = Frame(self)
-        bottomBtnFrame.pack(side=BOTTOM, fill=X, padx=8, pady=(0,4))
+        bottomBtnFrame.pack(side=BOTTOM, fill=X)
         exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
-        exitBtn.pack(side=RIGHT)
+        exitBtn.pack(side=RIGHT, pady=(0,8), padx=(0,8))
 
     def launchOutputWindow(self):
         if self.outputWindow is None or not self.outputWindow.winfo_exists(): #closed or was never opened
@@ -243,7 +242,7 @@ class CalibrationWindow(Toplevel):
         #used finally when exporting parameters
         def getPointsSortedByVoltage(self):
             voltages = [result.mean for result in self.results]
-            sortedIndicies = argsort(voltages)
+            sortedIndicies = np.argsort(voltages)
             return [voltages[i] for i in sortedIndicies], [self.distances[i] for i in sortedIndicies]
 
     def deleteReading(self, iid):
@@ -318,7 +317,7 @@ class CalibrationWindow(Toplevel):
                 #check if the graph fits everything
                 if distance > self.maxX:
                     self.maxX = distance + 1
-                res = self.results[sensor].insert(distance, currentReadings[i]) #hanles merging, averaging etc.
+                res = self.results[sensor].insert(distance, currentReadings[i]) #handles merging, averaging etc.
                 if res.mean > self.maxY:
                     self.maxY = res.mean + 1
 
@@ -356,7 +355,7 @@ class CalibrationWindow(Toplevel):
         f = Figure(figsize=(8, 5), dpi=100)
         a = f.add_subplot(111)
         a.set_xlabel("Distance (mm)")
-        a.set_ylabel("Inductance (mV)")
+        a.set_ylabel("Inductance (V)")
         self.maxX = 10
         self.maxY = settings.maxDAQoutput
         a.set_xlim([0,self.maxX])
@@ -377,40 +376,48 @@ class CalibrationWindow(Toplevel):
         self.graph.set_xlim([0, self.maxX])
         self.graph.set_ylim([0, self.maxY])
 
+        lin = np.linspace(0, self.maxX, num=self.maxX*20)
+
         for s in range(settings.numsensors):
             xs, ys = self.results[s].getPointsSortedByDistance()
             if len(xs) == 0:
                 continue
             self.graph.scatter(xs, ys, c=self.plotColours[s], label="Sensor " + str(s+1))
-            if len(xs) > 1:
-                self.graph.plot(xs, ys, c=self.plotColours[s])
+            if len(xs) > 3 and max(xs) - min(xs) >= 4:
+                self.graph.plot(lin, np.polyval(np.polyfit(xs, ys, 3), lin), c=self.plotColours[s])
+            elif len(xs) > 1:
+                self.graph.plot(lin, np.polyval(np.polyfit(xs, ys, 1), lin), c=self.plotColours[s])
 
         self.graph.set_xlabel("Distance (mm)")
-        self.graph.set_ylabel("Inductance (mV)")
+        self.graph.set_ylabel("Inductance (V)")
 
         h,l = self.graph.get_legend_handles_labels()
         self.graph.legend(h,l)
 
         self.canvas.draw()
 
+    #exports list of sensornum polynomial 
     def exportParameters(self):
         f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
         if f is not None:
             parameters = self.getParameters()
-            for sensor in parameters:
-                f.write(str(sensor[0]) + "\n")
-                for x, y in sensor[1:]:
-                    f.write (str(x) + " " + str(y) + "\n")
+            for sensorparams in parameters:
+                for i in sensorparams:
+                    f.write(str(i) + " ")
+                f.write("\n")
         self.parametersExported = True
 
-    #returns [[sensornum, [x0, y0]...]...]
+    #returns [[sensornum, c0...]...]
     def getParameters(self):
-        sensors = []
+        params = []
         for i in range(settings.numsensors):
-            xs, ys = self.results[i].getPointsSortedByVoltage()
-            if len(xs) >= 2:
-                sensors.append([i] + [[xs[i], ys[i]] for i in range(len(xs))])
-        return sensors
+            xs, ys = self.results[i].getPointsSortedByDistance()
+            if len(xs) > 3 and max(xs) - min(xs) >= 4: #we flip ys and xs on purpose
+                params.append(np.insert(np.polyfit(ys, xs, 3), 0, i))
+            elif len(xs) > 1:
+                params.append(np.insert(np.polyfit(ys, xs, 3), 0, i))
+        print(params)
+        return params
 
     def fin(self):
         good = False  # there exists a sensor with enough readings

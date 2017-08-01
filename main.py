@@ -8,7 +8,7 @@ from tkinter import messagebox
 from tkinter import filedialog
 from tkinter.ttk import *
 
-class MainWindow(Tk):
+class MainWindow(Tk): #todo fin on close
     def __init__(self):
         Tk.__init__(self)
         self.title("Swellometer")
@@ -35,8 +35,7 @@ class MainWindow(Tk):
             if calibrationWindow.finalParams is not None:
                 experimentWindow = measure.ExperimentWindow(self, calibrationWindow.getParameters(), self.connection)
                 self.wait_window(experimentWindow)
-            else:
-                self.deiconify()
+            self.deiconify()
 
         Button(self, text="Calibrate sensors", command=calibrationOption, width=15).pack(pady=10)
 
@@ -57,26 +56,17 @@ class MainWindow(Tk):
                 try:
                     with open(filename, "r") as f:
                         params = []
-                        sensor = int(f.readline())
-                        while sensor is not None:
-                            thisone = [sensor]
-                            arr = f.readline().split()
-                            while len(arr) == 2:
-                                thisone.append([float(arr[0]), float(arr[1])])
-                                arr = f.readline().split()
-                            params.append(thisone)
-                            if len(arr) == 1:
-                                sensor = int(arr[0])
-                            elif len(arr) > 2:
-                                raise ValueError("Bad file")
-                            else:
-                                sensor = None
+                        line = f.readline()
+                        while line:
+                            params.append(line.split(" ")[:-1]) #get rid of newline
+                            line = f.readline()
                         experimentWindow = measure.ExperimentWindow(self, params, self.connection)
-                except ValueError:
+                except ValueError as e:
                     messagebox.showerror("Invalid file", "Could not read from this file.", parent=self)
                     self.deiconify()
                     return
                 self.wait_window(experimentWindow)
+                self.deiconify()
 
         Button(self, text="Load calibration", command=loadSettingsOption, width=15).pack(pady=10)
 
