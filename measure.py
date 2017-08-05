@@ -20,8 +20,10 @@ class ExperimentWindow(Toplevel):
         self.sensors = []
         for sensor in sensorsettings:
             try:
+                if len(sensor) != 3:
+                    raise ValueError("Bad input")
                 self.sensors.append(int(sensor[0]))
-                self.paramList.append(np.poly1d([float(x) for x in sensor[1:]]))
+                self.paramList.append(sensor[1:])
             except Exception as e:
                 raise e
                 #raise ValueError("Bad input")
@@ -40,8 +42,8 @@ class ExperimentWindow(Toplevel):
 
         menubar = Menu(self)
         filemenu = Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Export results", command=self.exportReadings)
-        filemenu.add_command(label="Clear results", command=self.clearResults)
+        filemenu.add_command(label="Export results", command=self.exportUnsavedReadings)
+        filemenu.add_command(label="Restart test", command=self.restart)
         filemenu.add_command(label="Exit", command=self.fin)
         menubar.add_cascade(label="File", menu=filemenu)
         settingsMenu = Menu(menubar, tearoff=0)
@@ -51,11 +53,12 @@ class ExperimentWindow(Toplevel):
         viewmenu = Menu(menubar, tearoff=0)
         viewmenu.add_command(label="Sensor outputs", command=self.launchOutputWindow)
         menubar.add_cascade(label="View", menu=viewmenu)
+        self.menubar = menubar
         
         self.config(menu=menubar)
         self.protocol('WM_DELETE_WINDOW', self.fin)
         self.name = time.ctime()
-        self.filename = time.strftime("%d-%m-%Y")
+        self.filename = ""
         self.initwindow()
         self.notes = ""
         self.setupTest()
@@ -64,7 +67,7 @@ class ExperimentWindow(Toplevel):
         self.attributes("-topmost", 1)
         self.attributes("-topmost", 0)
 
-    def clearResults(self):
+    def restart(self):
         if messagebox.askyesno("Clear Results", "Are you sure you want to reset the test?", parent=self):
             self.stopRecording()
             self.currentPercentageSwelling = None
@@ -73,6 +76,7 @@ class ExperimentWindow(Toplevel):
             self.lastSaveTime = None
             self.nextUnsavedIndex = None
             self.animation = None
+            self.filename = ""
             self.graph.clear()
             self.graph.set_xlabel("Time (m)")
             self.graph.set_ylabel("Relative swell (%)")
@@ -88,6 +92,11 @@ class ExperimentWindow(Toplevel):
 
             self.canvas.show()
 
+            self.menubar.entryconfig("Settings", state="normal")
+
+            self.setupTest()
+            self.setupSensors()
+
     def setupTest(self):
         t = Toplevel(self)
         t.geometry("+%d+%d" % (self.winfo_rootx() + 80, self.winfo_rooty() + 80))
@@ -101,10 +110,15 @@ class ExperimentWindow(Toplevel):
         nameEntry.insert(0, self.name)
         nameEntry.pack(side=LEFT, padx=(4,0), fill=X, expand=True)
         Label(nameFrame, text="Filename: ").pack(side=LEFT, padx=(4,0))
-        filenameEntry = Entry(nameFrame)
-        filenameEntry.insert(0, self.filename)
-        filenameEntry.pack(side=LEFT, padx=(4,0), fill=X, expand=True)
-        filenameEntry.config(state = NORMAL if self.currentPercentageSwelling is None else DISABLED)
+
+        def selectFileName():
+            filename = filedialog.asksaveasfilename(parent=t, defaultextension=".data",
+                                         filetypes=[("Data File", "*.data")])
+            if self.filename != "" and filename != self.filename:
+                os.remove(self.filename)
+            self.filename = filename
+
+        Button(nameFrame, text='Choose...', command=selectFileName).pack(side=LEFT)
 
         notesFrame = Frame(fr)
         notesFrame.pack(side=TOP, fill=BOTH, expand=True, pady=(4,0))
@@ -116,27 +130,25 @@ class ExperimentWindow(Toplevel):
         def setTestSettings():
             name = nameEntry.get()
             if name == "":
-                messagebox.showerror("Error", "Test name cannot be empty.", parent=self)
+                messagebox.showerror("Error", "Test name cannot be empty.", parent=t)
                 return
-
-            if self.lastSaveTime is None and os.path.isfile(filenameEntry.get() + ".data"):
-                result = messagebox.askquestion("File already exists", "Overwrite '" + filenameEntry.get() + ".data'?", icon='warning', parent=self)
-                if result == "no":
-                    return
-                else:
-                    open(filenameEntry.get() + ".data", 'w').close() #erase it
 
             self.name = name
             self.notes = notes.get("1.0", END)
+            if self.filename == "":
+                result = messagebox.askquestion("No output file", "No output file selected. Proceed without saving?", icon='warning', parent=t)
+                if result == "no":
+                    return
             t.destroy()
 
         Button(fr, text="Done", command=setTestSettings).pack(side=RIGHT)
-        t.resizable(False, False)
 
+        t.protocol("WM_DELETE_WINDOW", setTestSettings)
+        t.resizable(False, False)
         t.grab_set()
         self.wait_window(t)
 
-    def setupSensors(self): #todo investigate why this clears the graph
+    def setupSensors(self):
         t = Toplevel(self)
         t.geometry("+%d+%d" % (self.winfo_rootx() + 80, self.winfo_rooty() + 80))
         t.title("Sensors")
@@ -145,8 +157,7 @@ class ExperimentWindow(Toplevel):
         nameentries = []
         thicknessentries = []
         Label(fr, text="Sensor Name: ").grid(row=0, column=0, padx=(0,4))
-        Label(fr, text="Initial thickness(mm): ").grid(row=0, column=1, padx=(4,0))
-        stat = NORMAL if self.currentPercentageSwelling is None else DISABLED #disallow changes to initial thicknesses if the test has started - we calculate relative swell
+        Label(fr, text="Initial thickness (mm): ").grid(row=0, column=1, padx=(4,0))
         for i in range(len(self.sensors)):
             e = Entry(fr)
             e.insert(0, self.sensorNames[i])
@@ -154,11 +165,10 @@ class ExperimentWindow(Toplevel):
             e.grid(row=i+1, column=0, pady=2, padx=(0,4))
             th = Entry(fr)
             th.insert(0, str(self.initialThicknesses[i]))
-            th.config(state = stat)
             thicknessentries.append(th)
             th.grid(row=i+1, column=1, pady=2, padx=(4,0))
 
-        def updateSettings():
+        def updateSensorSettings():
             values = [entry.get() for entry in nameentries]
             #check sensors have unique names
             #could be done asymptotically faster w/ sorting or a map but we have like 4 sensors
@@ -180,9 +190,10 @@ class ExperimentWindow(Toplevel):
             self.canvas.show()
             t.destroy()
 
-        Button(fr, text="Save", command=updateSettings).grid(row=len(self.sensors) + 1, column=1, sticky=E,  padx=(8,0), pady=(4,0))
+        Button(fr, text="Save", command=updateSensorSettings).grid(row=len(self.sensors) + 1, column=1, sticky=E,  padx=(8,0), pady=(4,0))
         t.resizable(False, False)
 
+        t.protocol("WM_DELETE_WINDOW", updateSensorSettings)
         t.grab_set()
         self.wait_window(t)
 
@@ -233,30 +244,19 @@ class ExperimentWindow(Toplevel):
         self.progressBar.pack(side=LEFT, fill=X, expand=True, padx=(8,0))
         progressFrame.pack(side=LEFT, fill=X, expand=True, padx=8, pady=8)
 
-    def exportReadings(self):
-        if self.currentPercentageSwelling is None:
+    def exportUnsavedReadings(self):
+        if self.filename == "": #user has been warned, chose to proceed w/out saving
+            return
+
+        if self.nextUnsavedIndex is None:
             messagebox.showerror("No readings", "Please take some readings first.", parent=self)
             return
 
         if self.nextUnsavedIndex >= len(self.currentPercentageSwelling[0]):
             return #all saved
 
-        with open(self.filename + ".data", "a+") as f:
+        with open(self.filename, "a+") as f:
             f.seek(0, os.SEEK_END)
-            #check if file is empty
-            if (f.tell() == 0):
-                f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nRate " + str(1000/self.lastrate) + "\nNotes:\n")
-                notes = self.notes.translate(str.maketrans({"\\": r"\\"}))
-                f.write(notes + "\n\\\n")
-                f.write("# sensors: " + str(len(self.sensors)) + "\n")
-                f.write("Sensor names:\n")
-                for name in self.sensorNames:
-                    f.write(name + "\n")
-                f.write("Initial thicknesses(mm) - Initial displacements(mm):\n")
-                for i in range(len(self.sensors)):
-                    f.write(str(self.initialThicknesses[i]) + " - " + str(self.initialReadings[i]) + "\n")
-                f.write("For each sensor: Time(m) - Displacement(%) - Voltage(V)\n")
-
             for pointIndex in range(self.nextUnsavedIndex + 1, len(self.currentPercentageSwelling[0])):
                 for sensorIndex in range(len(self.sensors)):
                     f.write(str(self.actualTimes[sensorIndex][pointIndex]) + " " + str(self.currentPercentageSwelling[sensorIndex][pointIndex])
@@ -270,7 +270,7 @@ class ExperimentWindow(Toplevel):
         if self.animation is None:
             return
 
-        self.exportReadings()
+        self.exportUnsavedReadings()
 
         self.animation.event_source.stop()
         self.animation = None
@@ -289,11 +289,18 @@ class ExperimentWindow(Toplevel):
             if result == "no":
                 return
 
+        if self.filename == "":
+            result = messagebox.askquestion("No output file", "No output file has been selected. Proceed without saving?", icon='warning', parent=self)
+            if result == "no":
+                return
+
         t = tools.getFloatFromEntry(self, self.timeEntry, "Duration", mini=0)
         rate = tools.getFloatFromEntry(self, self.rateEntry, "Readings/minute", mini=0.01, maxi=130)
 
         if t is None or rate is None:
             return
+
+        self.menubar.entryconfig("Settings", state="disabled")
 
         rate = self.lastrate = 60000/rate
 
@@ -317,37 +324,66 @@ class ExperimentWindow(Toplevel):
                 readings[s].append(self.getCurrentDisplacementVoltage(s)[0])
             time.sleep(0.2)
         self.initialReadings = [sum(j)/len(j) for j in readings]
+
+        if self.filename != "":
+            try:
+                with open(self.filename, "w") as f:
+                    f.write(self.name + "\n" + time.ctime() + "\n" + str(time.time()) + "\nNotes:\n")
+                    notes = self.notes.translate(str.maketrans({"\\": r"\\"}))
+                    f.write(notes + "\n\\\n")
+                    f.write("# sensors: " + str(len(self.sensors)) + "\n")
+                    f.write("Sensor names:\n")
+                    for name in self.sensorNames:
+                        f.write(name + "\n")
+                    f.write("Initial thicknesses(mm) - Initial displacement:\n")
+                    for i in range(len(self.sensors)):
+                        f.write(str(self.initialThicknesses[i]) + " - " + str(self.initialReadings[i]) + "\n")
+                    f.write("For each sensor: Time(m) - Displacement(%) - Voltage(V)\n")
+            except Exception as e:
+                messagebox.showerror("Error", "Could not open '" + self.filename + "' to export", parent=self)
+                self.filename = ""
+                self.stopRecording()
+                raise e
         
         multipliers = [100/self.initialThicknesses[i] for i in range(len(self.sensors))] #pre-compute conversion constant into percentage swelling
         self.currentPercentageSwelling = [[] for _ in range(len(self.sensors))]
         self.currentVoltages = [[] for _ in range(len(self.sensors))]
         self.actualTimes = [[] for _ in range(len(self.sensors))]
         self.progressBar.config(maximum=t)
+        self.updateYAxis = False
 
         def takeSingleResult(_):
             moment = time.time()
-            if (moment - self.lastSaveTime) > 300: #save everything
-                self.exportReadings()
+            if (moment - self.lastSaveTime) > 300: #save everything after 5 mins
+                self.exportUnsavedReadings()
                 self.lastSaveTime = moment
 
             mins = (moment - self.lastStartTime) / 60
-            if mins >= t:
-                self.stopRecording()
-                return
+            
             self.progressBar["value"] = mins
             self.progressLabel.config(text = str(round(mins/t * 100, 2)) + "%")
+
+            if self.updateYAxis:
+                self.graph.draw_artist(self.graph.yaxis)
+
             for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacementVoltage(i)
                 d = self.initialReadings[i] - d
                 percentage = 100 + d * multipliers[i]
                 if (percentage > self.maxY):
                     self.maxY = percentage + 10
-                    self.graph.set_ylim([100, self.maxY])
+                    self.graph.set_ylim([95, self.maxY])
+                    self.updateYAxis = True
+
                 self.currentPercentageSwelling[i].append(percentage)
                 self.currentVoltages[i].append(v)
                 self.actualTimes[i].append((time.time() - self.lastStartTime) / 60)
                 plot = self.plots[i]
                 plot.set_data(self.actualTimes[i], self.currentPercentageSwelling[i])
+
+            if mins >= t:
+                self.stopRecording()
+
             return self.plots
 
         self.lastStartTime = time.time()
@@ -364,12 +400,13 @@ class ExperimentWindow(Toplevel):
             self.outputWindow.lift()
 
     def getCurrentDisplacementVoltage(self, i):
-        points = self.paramList[i]
         v = self.connection.read(self.sensors[i])
-        return  [self.paramList[i](v), v]
+        m, b = self.paramList[i]
+        return  [m * v + b, v]
 
     def initGraphFrame(self, fr):
         f = plt.figure(figsize=(8, 5), dpi=100)
+        #plt.ion()
         self.fig = f
         a = f.add_subplot(111)
         a.set_xlabel("Time (m)")
@@ -379,7 +416,7 @@ class ExperimentWindow(Toplevel):
         a.set_ylim([95,self.maxY])
         self.plots = []
         for i in range(len(self.sensors)):
-            l, = a.plot([], label=self.sensorNames[i])
+            l, = a.plot([], label=self.sensorNames[i], animated=True)
             self.plots.append(l)
         h, l = a.get_legend_handles_labels()
         a.legend(h, l)
@@ -401,38 +438,11 @@ class ExperimentWindow(Toplevel):
             self.stopRecording()
 
         if self.currentPercentageSwelling is not None:
-            self.exportReadings()
+            self.exportUnsavedReadings()
 
         if self.outputWindow is not None and self.outputWindow.winfo_exists():
             self.outputWindow.destroy()
         self.destroy()
-
-"""
-#points is a list of coordinates - [[x0, y0]...]
-#xs must be sorted in ascending order!
-def piecewiseLinearInterpolate(points, xval):    
-    if len(points) < 2:
-        raise ValueError("Need at least two points!")
-    #check if we're past the left, extrapolate using first two points if so
-    if xval < points[0][0]:
-        x1, y1 = points[0]
-        x2, y2 = points[1]
-        m = (y2 - y1) / (x2 - x1)
-        return y1 - m * (x1 - xval)
-    for i in range(len(points) - 1):
-        if xval > points[i+1][0]:
-            continue
-        else:
-            x1, y1 = points[i]
-            x2, y2 = points[i+1]
-            deltax = xval - points[i][0]
-            return y1 + (y2 - y1) * (xval - x1)/(x2-x1)
-    #if we get here we're past the last point - just extrapolate the last gradient
-    x1, y1 = points[-2]
-    x2, y2 = points[-1]
-    m = (y2 - y1) / (x2 - x1)
-    return y2 + m * (xval - x2)
-"""
 
 if __name__ == '__main__':
     print("Run main.py")

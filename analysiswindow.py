@@ -7,15 +7,17 @@ from tkinter import messagebox
 from tkinter import font
 from tkinter.ttk import *
 
-class AnalysisWindow(Tk):
+class AnalysisWindow(Toplevel):
     def __init__(self):
-        Tk.__init__(self)
+        Toplevel.__init__(self)
         self.title("Swellometer Analysis")
         self.loadedRuns = {} #(runname, runtime) -> (listID, runObject)
         self.graphmode = StringVar(self)
         self.graphmode.set("Percentage Displacement")
-        self.initwindow()
+        self.filtermode = IntVar(self)
+        self.filtermode.set(0)
         self.resizable(False, False)
+        self.initwindow()
 
     def initwindow(self):
         mainFrame = Frame(self)
@@ -27,7 +29,7 @@ class AnalysisWindow(Tk):
         leftFrame = Frame(mainFrame)
         leftFrame.pack(side=LEFT, fill=Y, expand=True, padx=(0, 8))
 
-        listFrame = Frame(leftFrame, width=300)
+        listFrame = Frame(leftFrame, width=400)
         listFrame.pack(side=TOP, fill=Y, expand=True)
         scrollbar = Scrollbar(listFrame)
         importList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("name", "points"))
@@ -35,7 +37,7 @@ class AnalysisWindow(Tk):
         scrollbar.pack(side=RIGHT, fill=Y)
         importList["show"] = "headings"
         importList.heading("name", text="Name")
-        importList.column("name", minwidth=100, width=200)
+        importList.column("name", minwidth=3000, width=300)
         importList.heading("points", text="# points")
         importList.column("points", minwidth=10, width=100)
         importList.pack(side=LEFT, fill=BOTH, expand=True)
@@ -89,33 +91,42 @@ class AnalysisWindow(Tk):
 
         Button(leftFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
 
-        OptionMenu(leftFrame, self.graphmode, "Percentage Displacement", "Percentage Displacement", "Average Percentage Displacement", "Voltages", "Swelling Rate", "Total Swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
+        OptionMenu(leftFrame, self.graphmode, "Percentage displacement", "Percentage displacement", 
+            "Average percentage displacement", "Voltages", "Swelling rate", "Average swelling rate", "Total swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
+        Checkbutton(leftFrame, text="Smooth graph",  variable=self.filtermode, command=self.setFilterMode).pack(side=LEFT, padx=(4,0), pady=(4, 0))
         self.setGraphMode()
-
         self.mainloop()
 
-    def setGraphMode(self, _=None): #throw away event parameter from optionmenu callback
+    #def setGraphLimits
+
+    def setGraphMode(self, _=None):
         runs = [run for _, (_, run) in self.loadedRuns.items()]
         selection = self.graphmode.get()
-        if selection == "Percentage Displacement":
+        if selection == "Percentage displacement":
             self.graph.plotDistances(runs)
         elif selection == "Voltages":
             self.graph.plotVoltages(runs)
-        elif selection == "Total Swell":
+        elif selection == "Total swell":
             self.graph.plotTotalSwells(runs)
-        elif selection == "Swelling Rate":
+        elif selection == "Swelling rate":
             self.graph.plotRatePercentageSwell(runs)
-        elif selection == "Average Percentage Displacement":
-            self.graph.plotAveragePercentageSwells(runs)
+        elif selection == "Average percentage displacement":
+            self.graph.plotAverageDistance(runs)
+        elif selection == "Average swelling rate":
+            self.graph.plotAverageSwellingRate(runs)
         else:
             self.graph.clear()
             self.graph.draw()
+
+    def setFilterMode(self):
+        self.graph.tofilter = self.filtermode.get() == 1
+        self.setGraphMode()
 
     def deleteObject(self, iid, warn=True):
         pointed = self.indexPointers[iid]
         if "runname" in pointed:
             if warn:
-                res = messagebox.askyesno("Delete run", "Are you sure you want to delete this run and all of its data?", parent=self)
+                res = messagebox.askyesno("Delete run", "Are you sure you want to remove this run and all of its data?", parent=self)
                 if res == "no":
                     return
             for i in self.importList.get_children(iid):
@@ -128,6 +139,14 @@ class AnalysisWindow(Tk):
         self.importList.delete(iid)
         del self.indexPointers[iid]
         self.setGraphMode()
+
+    def setGraphAxis(self):
+        t = Toplevel(self)
+        paddingFrame = Frame(t)
+        paddingFrame.pack(side=TOP, padx = 8, pady = 8)
+
+        xoptions = Frame(paddingFrame)
+
 
     def runInfoDialog(self, run):
         t = Toplevel(self)
@@ -160,8 +179,8 @@ class AnalysisWindow(Tk):
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + sensor["name"]).pack(side=TOP)
         Label(frame, text="# of readings: " + str(len(sensor["times"]))).pack(side=TOP)
-        Label(frame, text="Initial displacement (mm): " + str(sensor["initialDisplacement"])).pack(side=TOP)
         Label(frame, text="Initial sample thickness (mm): " + str(sensor["initialThickness"])).pack(side=TOP)
+        Label(frame, text="Initial displacement (mm): " + str(sensor["initialDisplacement"])).pack(side=TOP)
 
         listFrame = Frame(frame, width=300)
         listFrame.pack(side=TOP)
@@ -193,18 +212,17 @@ class AnalysisWindow(Tk):
         paddingFrame.pack(fill=BOTH, expand=True, padx = 8, pady = 8)
         t.title("Import sensor data")
         Label(paddingFrame, text="Import from '" + os.path.basename(filename) + "'").pack(side=TOP)
-        self.checkboxVars = [IntVar(value=1) for _ in names]
+        self.checkboxVars = [IntVar() for _ in names]
+        self.checkbuttons = []
         for n in range(len(names)):
-            #self.checkboxVars[n].set(1)
             c = Checkbutton(paddingFrame, text=names[n], variable=self.checkboxVars[n])
-            c.state(['selected'])
+            self.checkboxVars[n].set(1)
             c.pack(side=TOP, pady=4)
 
         t.resizable(False, False)
         Button(paddingFrame, text="Import", command=t.destroy).pack(side=TOP)
 
         self.wait_window(t)
-
         return [n.get() == 1 for n in self.checkboxVars]
 
     def importData(self):
@@ -228,8 +246,6 @@ class AnalysisWindow(Tk):
                         else:
                             iid, _ = self.loadedRuns[(runname, timeofrun)]
                             self.deleteObject(iid, warn=False)
-
-                    rate = f.readline()[:-1].split()[1]
                     f.readline() #'Notes:'
                     notes = ""
                     while True: #notes are delimited by single backslash
@@ -248,9 +264,9 @@ class AnalysisWindow(Tk):
                     sensors = [{"name": f.readline()[:-1], "times":[], "pdisplacements":[], "voltages":[]} for _ in range(numsensors)]
                     f.readline() #"Initial thicknesses(mm) - Initial displacements(mm):
                     for i in range(numsensors):
-                        initialThickness, _, initialDisplacement = f.readline().split()
-                        sensors[i]["initialThickness"] = float(initialThickness)
-                        sensors[i]["initialDisplacement"] = float(initialDisplacement[:-1])
+                        thicc, _, displacement = f.readline().split()
+                        sensors[i]["initialThickness"] = float(thicc)
+                        sensors[i]["initialDisplacement"] = float(displacement)
                     f.readline() #'Time(m) - Displacement(%) - Voltage(V)'
                     f.readline() #newline
 
@@ -266,7 +282,7 @@ class AnalysisWindow(Tk):
 
                     toimport = self.chooseSensorsDialogue([sensors[i]["name"] for i in range(numsensors)], filename)
                     sensors = {sensors[i]["name"]:sensors[i] for i in range(numsensors) if toimport[i]}
-                    runs.append({"runname": runname, "timeofrun": timeofrun, "rate":rate, "sensors": sensors, "notes":notes})
+                    runs.append({"runname": runname, "timeofrun": timeofrun, "sensors": sensors, "notes":notes})
             except Exception as e:
                 messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
                 raise e

@@ -2,6 +2,7 @@ import calibration
 import analysiswindow
 import measure
 import tools
+import settings
 
 from tkinter import *
 from tkinter import messagebox
@@ -16,7 +17,7 @@ class MainWindow(Tk): #todo fin on close
         self.resizable(False, False)
         try:
             self.connection = tools.DAQInput()
-        except ModuleNotFoundError:
+        except ImportError:
             self.connection = None 
         self.initwindow()
         self.mainloop()
@@ -32,7 +33,7 @@ class MainWindow(Tk): #todo fin on close
             self.withdraw()
             calibrationWindow = calibration.CalibrationWindow(self, self.connection)
             self.wait_window(calibrationWindow)
-            if calibrationWindow.finalParams is not None:
+            if calibrationWindow.userFinished:
                 experimentWindow = measure.ExperimentWindow(self, calibrationWindow.getParameters(), self.connection)
                 self.wait_window(experimentWindow)
             self.deiconify()
@@ -48,22 +49,23 @@ class MainWindow(Tk): #todo fin on close
             if filename:
                 self.withdraw()
 
-                #ExperimentWindow params are of the form [[sensornum, [x0, y0]...]...]
+                #ExperimentWindow params are of the form [[sensornum, m, b]...] 
                 #calibration files are of the form:
-                #sensornum
-                #x0 y0
+                #sensornum m b
                 #...
                 try:
                     with open(filename, "r") as f:
                         params = []
                         line = f.readline()
                         while line:
-                            params.append(line.split(" ")[:-1]) #get rid of newline
+                            num, m, b, newline = line.split(" ") #throw away newline
+                            params.append([int(num), float(m), float(b)])
                             line = f.readline()
                         experimentWindow = measure.ExperimentWindow(self, params, self.connection)
-                except ValueError as e:
+                except Exception as e:
                     messagebox.showerror("Invalid file", "Could not read from this file.", parent=self)
                     self.deiconify()
+                    raise e
                     return
                 self.wait_window(experimentWindow)
                 self.deiconify()
@@ -84,6 +86,10 @@ class MainWindow(Tk): #todo fin on close
         exit()
 
 if __name__ == '__main__':
-    MainWindow()
+    try:
+        MainWindow()
+    except Exception as e:
+        messagebox.showerror("Error", str(e))
+        exit()
 
 

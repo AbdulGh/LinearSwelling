@@ -29,9 +29,8 @@ def getFloatFromEntry(master, entry, name, mini=None, maxi=None, forceInt=False)
 class DAQInput():
     def __init__(self):
         self.pydaqimported = "PyDAQmx" in sys.modules
-
+        self.taskHandles = None
         if "PyDAQmx" in sys.modules:
-            #DAQmxResetDevice("settings.devicename")
             taskHandles = [TaskHandle(0) for _ in range(settings.numsensors)]
             for i in range(settings.numsensors):
                 DAQmxCreateTask("",byref(taskHandles[i]))
@@ -39,7 +38,7 @@ class DAQInput():
                                      0, settings.maxDAQoutput, DAQmx_Val_Volts, None)
                 self.taskHandles = taskHandles
         #else: todo
-        #    raise ModuleNotFoundError("Could not import PyDAQmx")
+        #    raise ImportError("Could not import PyDAQmx")
 
     def read(self,i):
         try:
@@ -54,10 +53,11 @@ class DAQInput():
             return random.randint(0, 10) #todo replace this with a popup
 
     def close(self):
-        for taskHandle in self.taskHandles:
-            DAQmxStopTask(taskHandle)
-            DAQmxClearTask(taskHandle)
-        
+        if self.taskHandles is not None:
+            for taskHandle in self.taskHandles:
+                DAQmxStopTask(taskHandle)
+                DAQmxClearTask(taskHandle)
+            
 
 from tkinter import *
 from tkinter.ttk import *
@@ -80,6 +80,7 @@ class DAQRawOutputDialog(Toplevel):
 
         #init graph
         f = plt.figure()
+        #return
         f.subplots_adjust(hspace=.3)
         dimension = ceil(sqrt(settings.numsensors)) #number of plots on one side of the square grid
         self.sensoraxs = [f.add_subplot(2,2,i+1) for i in range(settings.numsensors)]

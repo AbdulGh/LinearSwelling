@@ -4,7 +4,9 @@ from tkinter import filedialog
 from tkinter.ttk import *
 from tkinter import font
 import numpy as np
-import scipy.stats
+from scipy import std
+from scipy.stats import linregress
+from math import isnan
 import tools
 import matplotlib
 import datetime
@@ -19,14 +21,13 @@ class CalibrationWindow(Toplevel):
         Toplevel.__init__(self, master)
         self.title("Swellometer calibration")
         self.connection = daqconnection
-        self.resizable(False, False)
 
         #used by tkinter to update labels
         self.readoutAfterID = None
         self.measurementAfterID = None
         self.results = [CalibrationWindow.SensorList(i) for i in range(settings.numsensors)]
         self.resListPointers = {} #treeview ids -> CalibrationResult
-        self.finalParams = None #used by other windows to check if the user calibrated successfully
+        self.userFinished = False #used by other windows to check if the user calibrated successfully
         self.parametersExported = False
         self.outputWindow = None
 
@@ -46,6 +47,7 @@ class CalibrationWindow(Toplevel):
         self.protocol('WM_DELETE_WINDOW', self.fin)
 
         self.initwindow()
+        self.resizable(False, False)
 
     def switchEntry(self, i=None):
         if i is None:
@@ -159,7 +161,7 @@ class CalibrationWindow(Toplevel):
 
         self.sensorTreeviewIDs = [] #sensor number -> treeview iid
         for i in range(settings.numsensors):
-            iid = resList.insert("", "end", i, values=("Sensor " + str(i + 1)), open=True, tags=("title",))
+            iid = resList.insert("", "end", i, values=("Sensor " + str(i + 1),), open=True, tags=("title",))
             self.sensorTreeviewIDs.append(iid)
         resList.pack(side=LEFT, fill=BOTH, expand=True)
         scrollbar.config(command=resList.yview)
@@ -189,7 +191,7 @@ class CalibrationWindow(Toplevel):
             self.num = len(inductionList)
             self.inductionList = inductionList
             self.mean = sum(inductionList) / len(inductionList)
-            self.SD = scipy.std(inductionList)
+            self.SD = std(inductionList)
             self.iid = None
 
         def export(self):
@@ -205,7 +207,7 @@ class CalibrationWindow(Toplevel):
             self.inductionList += merginglist
             self.num = len(self.inductionList)
             self.mean = sum(self.inductionList) / len(self.inductionList)
-            self.SD = scipy.std(self.inductionList)
+            self.SD = std(self.inductionList)
 
     class SensorList:
         def __init__(self, sensornum):
@@ -236,14 +238,8 @@ class CalibrationWindow(Toplevel):
             del self.distances[index]
             del self.results[index]
 
-        def getPointsSortedByDistance(self):
+        def getPoints(self):
             return self.distances, [result.mean for result in self.results]
-
-        #used finally when exporting parameters
-        def getPointsSortedByVoltage(self):
-            voltages = [result.mean for result in self.results]
-            sortedIndicies = np.argsort(voltages)
-            return [voltages[i] for i in sortedIndicies], [self.distances[i] for i in sortedIndicies]
 
     def deleteReading(self, iid):
         self.resList.delete(iid)
@@ -379,14 +375,13 @@ class CalibrationWindow(Toplevel):
         lin = np.linspace(0, self.maxX, num=self.maxX*20)
 
         for s in range(settings.numsensors):
-            xs, ys = self.results[s].getPointsSortedByDistance()
+            xs, ys = self.results[s].getPoints()
             if len(xs) == 0:
                 continue
             self.graph.scatter(xs, ys, c=self.plotColours[s], label="Sensor " + str(s+1))
-            if len(xs) > 3 and max(xs) - min(xs) >= 4:
-                self.graph.plot(lin, np.polyval(np.polyfit(xs, ys, 3), lin), c=self.plotColours[s])
-            elif len(xs) > 1:
-                self.graph.plot(lin, np.polyval(np.polyfit(xs, ys, 1), lin), c=self.plotColours[s])
+            if len(xs) > 1:
+                m, b = linregress(xs, ys)[:2]
+                self.graph.plot(lin, m * lin + b, c = self.plotColours[s])
 
         self.graph.set_xlabel("Distance (mm)")
         self.graph.set_ylabel("Inductance (V)")
@@ -396,27 +391,32 @@ class CalibrationWindow(Toplevel):
 
         self.canvas.draw()
 
-    #exports list of sensornum polynomial 
+    #exports list of [sensornum, m, b]
     def exportParameters(self):
         f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
         if f is not None:
             parameters = self.getParameters()
             for sensorparams in parameters:
-                for i in sensorparams:
+                f.write(str(int(sensorparams[0])) + " ")
+                for i in sensorparams[1:]:
                     f.write(str(i) + " ")
                 f.write("\n")
         self.parametersExported = True
 
-    #returns [[sensornum, c0...]...]
+    #returns [[sensornum, m, b]...]
     def getParameters(self):
         params = []
         for i in range(settings.numsensors):
-            xs, ys = self.results[i].getPointsSortedByDistance()
-            if len(xs) > 3 and max(xs) - min(xs) >= 4: #we flip ys and xs on purpose
-                params.append(np.insert(np.polyfit(ys, xs, 3), 0, i))
-            elif len(xs) > 1:
-                params.append(np.insert(np.polyfit(ys, xs, 3), 0, i))
-        print(params)
+            xs, ys = self.results[i].getPoints()
+            if len(xs) < 2:
+                continue
+            #other way around as we later relate voltage to distance
+            #throw away r-value, stderr etc
+            m, b = linregress(ys, xs)[:2]
+            if isnan(m) or isnan(b):
+                messagebox.showwarning("Vertical regression", "Could not form a line for sensor " + str(i))
+            else:
+                params.append([int(i), m, b])
         return params
 
     def fin(self):
@@ -451,7 +451,7 @@ class CalibrationWindow(Toplevel):
             if res:
                 self.exportParameters()
 
-        self.finalParams = self.getParameters()
+        self.userFinished = True
         if self.outputWindow is not None and self.outputWindow.winfo_exists():
             self.outputWindow.destroy()
         self.destroy()
