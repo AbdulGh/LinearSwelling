@@ -11,7 +11,7 @@ class AnalysisGraph(Frame):
         Frame.__init__(self, master, relief=SUNKEN, borderwidth=1)
         self.master = master
         self.tofilter = False
-        self.lastx = self.lasty = None
+        self.autoscaleX = self.autoscaleY = True
         f = Figure(figsize=(8, 5), dpi=100)
         a = f.add_subplot(111)
         self.graph = a
@@ -20,17 +20,51 @@ class AnalysisGraph(Frame):
         self.canvas = canvas
         canvas.get_tk_widget().pack(fill=BOTH, expand=True)
 
+        def savelims():
+            self.xmin, self.xmax = self.graph.get_xlim()
+            self.ymin, self.ymax = self.graph.get_ylim()
+
         class NavigationToolbar(NavigationToolbar2TkAgg): 
             def __init__(self, canvas, parent): #get rid of subplot stuff
                 self.toolitems = [t for t in NavigationToolbar2TkAgg.toolitems if t[0] in ("Home", "Pan", "Zoom", "Save")]
                 NavigationToolbar2TkAgg.__init__(self, canvas, parent)
+                self.parent = parent
+
+            def press_pan(self, event): #save lims after zoom/pan
+                NavigationToolbar2TkAgg.press_pan(self, event)
+                savelims()
+                self.parent.autoscaleX = self.parent.autoscaleY = False
+
+            def press_zoom(self, event):
+                NavigationToolbar2TkAgg.press_zoom(self, event)
+                savelims()
+                self.parent.autoscaleX = self.parent.autoscaleY = False
 
         self.toolbar = NavigationToolbar(canvas, self)
         self.toolbar.update()
         canvas._tkcanvas.pack(side=TOP, fill=BOTH, expand=True)
+        savelims()
+        self.graph.set_autoscale_on(False)
 
     def clear(self):
-        self.graph.clear() 
+        self.graph.clear()
+
+    """
+    def setLims(self, xmin=None, xmax=None, ymin=None, ymax=None):
+        if xmin is not None:
+            self.xmin = xmin
+        if xmax is not None:
+            self.xmax = xmax
+        if ymin is not None:
+            self.ymin = ymin
+        if ymax is not None:
+            self.ymax = ymax
+        self.scaleToLims()
+    """
+
+    """Returns [xmin, xmax, ymin, ymax]"""
+    def getCurrentLims(self):
+        return self.graph.get_xlim() + self.graph.get_ylim()
 
     def meanFilter(self, ys, n=7):
         length = min(len(ys), n)
@@ -46,23 +80,24 @@ class AnalysisGraph(Frame):
         self.graph.set_xlabel("Time (m)")
         self.graph.set_ylabel("Displacement (%)")
 
-        if len(runs) == 0:
-            self.canvas.draw()
-            return
-
         for i in range(len(runs)):
             run = runs[i]
+            if not run["toshow"]:
+                continue
+
+
             prefix = str(i+1) + " - " if len(runs) > 1 else ""
-            for sensorname, sensor in run["sensors"].items():
-                if self.tofilter:
+            if self.tofilter:
+                for sensorname, sensor in run["sensors"].items():
+                    if not sensor["toshow"]:
+                        continue
                     self.graph.plot(sensor["times"], self.meanFilter(sensor["pdisplacements"]), label=prefix + sensorname)
-                else:
+            else:
+                for sensorname, sensor in run["sensors"].items():
+                    if not sensor["toshow"]:
+                        continue
                     self.graph.plot(sensor["times"], sensor["pdisplacements"], label=prefix + sensorname)
-        h, l = self.graph.get_legend_handles_labels()
-        self.graph.legend(h, l)
-        self.graph.autoscale(True)
-        self.canvas.draw()
-        self.toolbar.update()
+        self.updateGraph()
 
     def plotAverageDistance(self, runs):
         self.clear()
@@ -70,17 +105,19 @@ class AnalysisGraph(Frame):
         self.graph.set_ylabel("Average swell (%)")
 
         #get number of readings
-        if len(runs) == 0:
-            self.canvas.draw()
-            return
 
         for run in runs:
+            if not run["toshow"]:
+                continue
+
             numvalues = len(next(iter(run["sensors"].values()))["pdisplacements"])
             numsensors = len(run["sensors"])
 
             sumDisplacements = np.zeros(numvalues)
             sumTimes = np.zeros(numvalues)
             for _, sensor in run["sensors"].items():
+                if not sensor["toshow"]:
+                    continue
                 sumDisplacements += np.array(sensor["pdisplacements"])
                 sumTimes += np.array(sensor["times"])
             sumDisplacements /= numsensors
@@ -91,34 +128,30 @@ class AnalysisGraph(Frame):
 
             self.graph.plot(sumTimes, sumDisplacements, label=run["runname"])
 
-        h, l = self.graph.get_legend_handles_labels()
-        self.graph.legend(h, l)
-        self.graph.autoscale(True)
-        self.canvas.draw()
-        self.toolbar.update()
+        self.updateGraph()
 
     def plotVoltages(self, runs):
         self.clear()
         self.graph.set_xlabel("Time (m)")
-        self.graph.set_ylabel("Voltage (mV)")
-
-        if len(runs) == 0:
-            self.canvas.draw()
-            return
+        self.graph.set_ylabel("Voltage (V)")
 
         for i in range(len(runs)):
+            if not runs[i]["toshow"]:
+                continue
+
             run = runs[i]
             prefix = str(i + 1) + " - " if len(runs) > 1 else ""
-            for sensorname, sensor in run["sensors"].items():
-                if self.tofilter:
+            if self.tofilter:
+                for sensorname, sensor in run["sensors"].items():
+                    if not sensor["toshow"]:
+                        continue
                     self.graph.plot(sensor["times"], self.meanFilter(sensor["voltages"]), label=prefix + sensorname)
-                else:
+            else:
+                for sensorname, sensor in run["sensors"].items():
+                    if not sensor["toshow"]:
+                        continue
                     self.graph.plot(sensor["times"], sensor["voltages"], label=prefix + sensorname)
-        h, l = self.graph.get_legend_handles_labels()
-        self.graph.legend(h, l)
-        self.graph.autoscale(True)
-        self.canvas.draw()
-        self.toolbar.update()
+        self.updateGraph()
 
     def plotTotalSwells(self, runs):
         self.clear()
@@ -127,9 +160,15 @@ class AnalysisGraph(Frame):
         xtics = []
         totalSwells = []
         for i in range(len(runs)):
+            if not runs[i]["toshow"]:
+                continue
+
             run = runs[i]
             prefix = str(i + 1) + " - " if len(runs) > 1 else ""
             for sensorname, sensor in run["sensors"].items():
+                if not sensor["toshow"]:
+                    continue
+
                 xtics.append(prefix + sensorname)
                 totalSwells.append(sensor["pdisplacements"][-1])
         if len(totalSwells) == 0:
@@ -149,11 +188,14 @@ class AnalysisGraph(Frame):
         self.graph.set_xlabel("Time (m)")
 
         if len(runs) == 0:
-            self.canvas.draw()
+            self.updateGraph()
             return
 
         for i in range(len(runs)):
             run = runs[i]
+            if not run["toshow"]:
+                continue
+
             prefix = str(i + 1) + " - " if len(runs) > 1 else ""
             for sensorname, sensor in run["sensors"].items():
                 displacements = sensor["pdisplacements"]
@@ -171,55 +213,9 @@ class AnalysisGraph(Frame):
                         xs.append((times[i] - lastTime)/2)
                         ys.append((displacements[i] - lastDisplacement) / (times[i] - lastTime))
                         lastDisplacement = displacements[i]
-                        lastTimes = times[i]
+                        lastTime = times[i]
 
                 self.graph.plot(xs, ys, label=prefix + sensorname)
-        h, l = self.graph.get_legend_handles_labels()
-        self.graph.legend(h, l)
-        self.graph.autoscale(True)
-        self.canvas.draw()
-        self.toolbar.update()
-
-
-
-    # def plotRatePercentageSwell(self, runs):
-    #     self.clear()
-    #     self.graph.set_ylabel("Rate of swelling (%/m)")
-    #     self.graph.set_xlabel("Time (m)")
-
-    #     if len(runs) == 0:
-    #         self.canvas.draw()
-    #         return
-
-    #     for i in range(len(runs)):
-    #         run = runs[i]
-    #         prefix = str(i + 1) + " - " if len(runs) > 1 else ""
-    #         for sensorname, sensor in run["sensors"].items():
-    #             displacements = sensor["pdisplacements"]
-    #             times = sensor["times"]
-
-    #             if len(times) <= 1:
-    #                 continue
-
-    #             xs = []
-    #             ys = []
-    #             #we add the rate if the time exceeds 0.3 minutes or the relative displacement raises by 2%
-    #             lastTime = times[0]
-    #             lastDisplacement = displacements[0]
-    #             for i in range(1, len(times)):
-    #                 if times[i] - lastTime > 0.3 or displacements[i] - lastDisplacement > 2:
-    #                     deltat = (times[i] - lastTime)
-    #                     xs.append(lastTime + deltat/2)
-    #                     ys.append((displacements[i] - lastDisplacement)/deltat)
-    #                     lastTime = times[i]
-    #                     lastDisplacement = displacements[i]
-    #             self.graph.plot(xs, ys, label=prefix + sensorname)
-
-    #     h, l = self.graph.get_legend_handles_labels()
-    #     self.graph.legend(h, l)
-    #     self.graph.autoscale(True)
-    #     self.canvas.draw()
-    #     self.toolbar.update()
 
     def plotAverageSwellingRate(self, runs):
         self.clear()
@@ -227,17 +223,20 @@ class AnalysisGraph(Frame):
         self.graph.set_ylabel("Average rate (%/m)")
 
         #get number of readings
-        if len(runs) == 0:
-            self.canvas.draw()
-            return
 
         for run in runs:
+            if not run["toshow"]:
+                continue
+
             numvalues = len(next(iter(run["sensors"].values()))["pdisplacements"])
             numsensors = len(run["sensors"])
 
             sumDisplacements = np.zeros(numvalues)
             sumTimes = np.zeros(numvalues)
             for _, sensor in run["sensors"].items():
+                if not sensor["toshow"]:
+                    continue
+
                 sumDisplacements += np.array(sensor["pdisplacements"])
                 sumTimes += np.array(sensor["times"])
             sumDisplacements /= numsensors
@@ -247,10 +246,24 @@ class AnalysisGraph(Frame):
                 sumDisplacements = self.meanFilter(sumDisplacements)
 
             self.graph.plot(sumTimes, sumDisplacements, label=run["runname"])
+        self.updateGraph()
 
+    def scaleToLims(self):
+        self.graph.relim()
+        self.graph.autoscale_view(scalex=self.autoscaleX, scaley=self.autoscaleY)
+        if not self.autoscaleX:
+            self.graph.set_xlim([self.xmin, self.xmax])
+        else:
+            self.xmin, self.xmax = self.graph.get_xlim()
+        if not self.autoscaleY:
+            self.graph.set_ylim([self.ymin, self.ymax])
+        else:
+            self.ymin, self.ymax = self.graph.get_ylim()
+
+    def updateGraph(self):
+        self.scaleToLims()
         h, l = self.graph.get_legend_handles_labels()
         self.graph.legend(h, l)
-        self.graph.autoscale(True)
         self.canvas.draw()
         self.toolbar.update()
 

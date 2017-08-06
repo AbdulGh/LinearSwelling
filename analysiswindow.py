@@ -32,24 +32,31 @@ class AnalysisWindow(Toplevel):
         listFrame = Frame(leftFrame, width=400)
         listFrame.pack(side=TOP, fill=Y, expand=True)
         scrollbar = Scrollbar(listFrame)
-        importList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("name", "points"))
+        importList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("name", "show"))
         scrollbar.config(command=importList.yview)
         scrollbar.pack(side=RIGHT, fill=Y)
         importList["show"] = "headings"
         importList.heading("name", text="Name")
         importList.column("name", minwidth=3000, width=300)
-        importList.heading("points", text="# points")
-        importList.column("points", minwidth=10, width=100)
+        importList.heading("show", text="Visible")
+        importList.column("show", minwidth=10, width=100)
         importList.pack(side=LEFT, fill=BOTH, expand=True)
 
         self.indexPointers = {} #treeview iid -> sensor/run
         def importListDoubleClick(event):
-            item = importList.identify('item',event.x,event.y)
+            item = importList.identify("item",event.x,event.y)
             pointed = self.indexPointers[item]
+
+            newdisplay = not pointed["toshow"]
+            pointed["toshow"] = newdisplay
+            importList.set(item, column="show", value=newdisplay)
+
             if "runname" in pointed: #doubleclicked run
-                self.runInfoDialog(pointed)
-            else:
-                self.sensorInfoDialog(pointed)
+                for child in importList.get_children(item):
+                    self.indexPointers[child]["toshow"] = newdisplay
+                    importList.set(child, column="show", value=newdisplay)
+
+            self.setGraphMode()
 
         class ImportListPopup(Menu):
             def __init__(self, master):
@@ -82,7 +89,7 @@ class AnalysisWindow(Toplevel):
             else:
                 pass
 
-        importList.bind("<Double-1>", importListDoubleClick)
+        importList.bind("<Double-Button-1>", importListDoubleClick)
         importList.bind("<Button-3>", importListRightClick)
 
         runFont = font.Font(family='Helvetica', size=10, weight='bold')
@@ -93,8 +100,19 @@ class AnalysisWindow(Toplevel):
 
         OptionMenu(leftFrame, self.graphmode, "Percentage displacement", "Percentage displacement", 
             "Average percentage displacement", "Voltages", "Swelling rate", "Average swelling rate", "Total swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
-        Checkbutton(leftFrame, text="Smooth graph",  variable=self.filtermode, command=self.setFilterMode).pack(side=LEFT, padx=(4,0), pady=(4, 0))
         self.setGraphMode()
+
+        menubar = Menu(self)
+        filemenu = Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Import test", command=self.importList)
+        menubar.add_cascade(label="File", menu=filemenu)
+        viewmenu = Menu(menubar, tearoff=0)
+        viewmenu.add_command(label="Edit ranges", command=self.setGraphAxis)
+        viewmenu.add_checkbutton(label="Smooth graph",  variable=self.filtermode, command=self.setFilterMode)
+        menubar.add_cascade(label="View", menu=viewmenu)
+        self.menubar = menubar
+        self.config(menu=menubar)
+
         self.mainloop()
 
     #def setGraphLimits
@@ -115,8 +133,7 @@ class AnalysisWindow(Toplevel):
         elif selection == "Average swelling rate":
             self.graph.plotAverageSwellingRate(runs)
         else:
-            self.graph.clear()
-            self.graph.draw()
+            raise ValueError("Weird dropdown option")
 
     def setFilterMode(self):
         self.graph.tofilter = self.filtermode.get() == 1
@@ -143,10 +160,71 @@ class AnalysisWindow(Toplevel):
     def setGraphAxis(self):
         t = Toplevel(self)
         paddingFrame = Frame(t)
-        paddingFrame.pack(side=TOP, padx = 8, pady = 8)
+        paddingFrame.pack(side=TOP, padx=8, pady=8)
+        
+        xmin, xmax, ymin, ymax = self.graph.getCurrentLims()
+        xmaxEntry = Entry(paddingFrame)
+        xmaxEntry.insert(0, xmax)
+        xmaxEntry.grid(row=0, column=4)
+        Label(paddingFrame, text="xmax:").grid(row=0, column=3, padx=(6,0))
+        xminEntry = Entry(paddingFrame)
+        xminEntry.insert(0, xmin)
+        xminEntry.grid(row=0, column=2)
+        Label(paddingFrame, text="xmin:").grid(row=0, column=1, padx=(6,0))
+        xautoscale = IntVar()
+        xautoscale.set(1 if self.graph.autoscaleX else 0)
 
-        xoptions = Frame(paddingFrame)
+        def xcheckclick():
+            status = NORMAL if xautoscale.get() == 0 else DISABLED
+            xminEntry.config(state=status)
+            xmaxEntry.config(state=status)
+        xcheckclick()
 
+        Checkbutton(paddingFrame, text="Autoscale x", variable=xautoscale, command=xcheckclick).grid(row=0, column=0)
+
+        ymaxEntry = Entry(paddingFrame)
+        ymaxEntry.insert(0, ymax)
+        ymaxEntry.grid(row=1, column=4, pady=(6,0))
+        Label(paddingFrame, text="ymax: ").grid(row=1, column=3, padx=(6,0), pady=(6,0))
+        yminEntry = Entry(paddingFrame)
+        yminEntry.insert(0, ymin)
+        yminEntry.grid(row=1, column=2, pady=(6,0))
+        Label(paddingFrame, text="ymin: ").grid(row=1, column=1, padx=(6,0), pady=(6,0))
+        yautoscale = IntVar()
+        yautoscale.set(1 if self.graph.autoscaleY else 0)
+
+        def ycheckclick():
+            status = NORMAL if yautoscale.get() == 0 else DISABLED
+            yminEntry.config(state=status)
+            ymaxEntry.config(state=status)
+        ycheckclick()
+
+        Checkbutton(paddingFrame, text="Autoscale y", variable=yautoscale, command=ycheckclick).grid(row=1, column=0, pady=(6,0))
+
+        def save():
+            if xautoscale.get() == 1:
+                self.graph.autoscaleX = True
+            else:
+                self.graph.autoscaleX = False
+                self.graph.xmin = float(xminEntry.get())
+                self.graph.xmax = float(xmaxEntry.get())
+
+            if yautoscale.get() == 1:
+                self.graph.autoscaleY = True
+            else:
+                self.graph.autoscaleY = False
+                self.graph.ymin = float(yminEntry.get())
+                self.graph.ymax = float(ymaxEntry.get())
+            self.graph.scaleToLims()
+            self.setGraphMode()
+            t.destroy()
+
+        btnFrame = Frame(paddingFrame)
+        btnFrame.grid(row=2, column=4, columnspan=1, sticky=E, pady=(4,0))
+        Button(btnFrame, text="Save", command=save).pack(side=RIGHT)
+        Button(btnFrame, text="Cancel", command=t.destroy).pack(side=RIGHT, padx=(0,4))
+        t.resizable(False, False)
+        self.wait_window(t)
 
     def runInfoDialog(self, run):
         t = Toplevel(self)
@@ -192,7 +270,7 @@ class AnalysisWindow(Toplevel):
         resList.column("time", minwidth=10, width=100)
         resList.heading("distance", text="Displacement (%)")
         resList.column("distance", minwidth=10, width=100)
-        resList.heading("voltage", text="Voltage (mV)")
+        resList.heading("voltage", text="Voltage (V)")
         resList.column("voltage", minwidth=10, width=100)
 
         for i in range(len(sensor["times"])):
@@ -261,7 +339,7 @@ class AnalysisWindow(Toplevel):
                         notes += c
                     numsensors = int(f.readline().split()[2])
                     f.readline() #Sensor names:
-                    sensors = [{"name": f.readline()[:-1], "times":[], "pdisplacements":[], "voltages":[]} for _ in range(numsensors)]
+                    sensors = [{"name": f.readline()[:-1], "times":[], "pdisplacements":[], "voltages":[], "toshow":True} for _ in range(numsensors)]
                     f.readline() #"Initial thicknesses(mm) - Initial displacements(mm):
                     for i in range(numsensors):
                         thicc, _, displacement = f.readline().split()
@@ -282,7 +360,7 @@ class AnalysisWindow(Toplevel):
 
                     toimport = self.chooseSensorsDialogue([sensors[i]["name"] for i in range(numsensors)], filename)
                     sensors = {sensors[i]["name"]:sensors[i] for i in range(numsensors) if toimport[i]}
-                    runs.append({"runname": runname, "timeofrun": timeofrun, "sensors": sensors, "notes":notes})
+                    runs.append({"runname": runname, "timeofrun": timeofrun, "sensors": sensors, "notes":notes, "toshow":True})
             except Exception as e:
                 messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
                 raise e
@@ -292,7 +370,7 @@ class AnalysisWindow(Toplevel):
             self.loadedRuns[(run["runname"], run["timeofrun"])] = [rootid, run]
             self.indexPointers[rootid] = run
             for name, sensor in run["sensors"].items():
-                self.indexPointers[self.importList.insert(rootid, "end", values=(name, str(len(sensor["times"]))))] = sensor
+                self.indexPointers[self.importList.insert(rootid, "end", values=(name, True))] = sensor
 
         self.setGraphMode()
     
