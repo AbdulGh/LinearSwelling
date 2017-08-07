@@ -2,7 +2,6 @@ from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
 from tkinter.ttk import *
-import numpy as np
 import tools
 import time
 import os
@@ -25,8 +24,9 @@ class ExperimentWindow(Toplevel):
                 self.sensors.append(int(sensor[0]))
                 self.paramList.append(sensor[1:])
             except Exception as e:
-                raise e
-                #raise ValueError("Bad input")
+                raise ValueError("Bad input")
+
+        self.running = False
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
         self.initialThicknesses = [2 for _ in range(len(self.sensors))]
         self.currentPercentageSwelling = None #percentage swelling of ongoing run (becomes a list of lists, one for each sensor)
@@ -76,6 +76,7 @@ class ExperimentWindow(Toplevel):
             self.lastSaveTime = None
             self.nextUnsavedIndex = None
             self.animation = None
+            self.running = False
             self.filename = ""
             self.graph.clear()
             self.graph.set_xlabel("Time (m)")
@@ -88,7 +89,7 @@ class ExperimentWindow(Toplevel):
                 l, = self.graph.plot([], label=self.sensorNames[i])
                 self.plots.append(l)
             h, l = self.graph.get_legend_handles_labels()
-            self.graph.legend(h, l)
+            self.graph.legend(h, l, loc="lower right")
 
             self.canvas.show()
 
@@ -186,7 +187,7 @@ class ExperimentWindow(Toplevel):
                 self.initialThicknesses.append(thickness)
 
             self.sensorNames = values
-            self.graph.legend(labels = self.sensorNames)
+            self.graph.legend(labels = self.sensorNames, loc="lower right")
             self.canvas.show()
             t.destroy()
 
@@ -282,6 +283,7 @@ class ExperimentWindow(Toplevel):
 
         self.progressLabel.config(text="Done.")
         self.progressBar["value"] = 0
+        self.running = False
 
     def startRecording(self):
         if self.currentPercentageSwelling is not None:
@@ -299,6 +301,8 @@ class ExperimentWindow(Toplevel):
 
         if t is None or rate is None:
             return
+
+        self.running = True
 
         self.menubar.entryconfig("Settings", state="disabled")
 
@@ -353,6 +357,8 @@ class ExperimentWindow(Toplevel):
         self.updateYAxis = False
 
         def takeSingleResult(_):
+            if not self.running:
+                return self.plots
             moment = time.time()
             if (moment - self.lastSaveTime) > 300: #save everything after 5 mins
                 self.exportUnsavedReadings()
@@ -362,9 +368,6 @@ class ExperimentWindow(Toplevel):
             
             self.progressBar["value"] = mins
             self.progressLabel.config(text = str(round(mins/t * 100, 2)) + "%")
-
-            if self.updateYAxis:
-                self.graph.draw_artist(self.graph.yaxis)
 
             for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacementVoltage(i)
@@ -384,12 +387,16 @@ class ExperimentWindow(Toplevel):
             if mins >= t:
                 self.stopRecording()
 
+            if self.updateYAxis:
+                self.canvas.draw()
+                self.updateYAxis = False
+
             return self.plots
 
         self.lastStartTime = time.time()
         self.lastSaveTime = self.lastStartTime
         self.nextUnsavedIndex = 0
-        self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=True)
+        self.animation = matplotlib.animation.FuncAnimation(self.fig, takeSingleResult, interval=rate, blit=True, repeat=False)
         self.canvas.show()
 
     def launchOutputWindow(self):
@@ -419,14 +426,15 @@ class ExperimentWindow(Toplevel):
             l, = a.plot([], label=self.sensorNames[i], animated=True)
             self.plots.append(l)
         h, l = a.get_legend_handles_labels()
-        a.legend(h, l)
+        a.legend(h, l, loc="lower right")
         self.graph = a
 
         wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
         canvas = FigureCanvasTkAgg(f, wrapper)
-        self.canvas = canvas
         canvas.show()
+        canvas.draw()
         canvas.get_tk_widget().pack(fill=BOTH, expand=True)
+        self.canvas = canvas
 
         return wrapper
 

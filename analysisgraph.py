@@ -182,22 +182,20 @@ class AnalysisGraph(Frame):
         self.canvas.draw()
         self.toolbar.update()
 
-    def plotRatePercentageSwell(self, runs):
-        self.clear()
-        self.graph.set_ylabel("Rate of swelling (%/m)")
-        self.graph.set_xlabel("Time (m)")
 
-        if len(runs) == 0:
-            self.updateGraph()
-            return
-
+    """returns [[runname, [sensorname, [[xs], [ys]]...]...]"""
+    def getSwellingRates(self, runs):
+        toreturn = []
         for i in range(len(runs)):
             run = runs[i]
             if not run["toshow"]:
                 continue
-
-            prefix = str(i + 1) + " - " if len(runs) > 1 else ""
+            thisrun = [run["runname"]]
+            thesesensors = []
             for sensorname, sensor in run["sensors"].items():
+                if not sensor["toshow"]:
+                    continue
+
                 displacements = sensor["pdisplacements"]
                 times = sensor["times"]
 
@@ -208,44 +206,60 @@ class AnalysisGraph(Frame):
                 ys = []
                 lastDisplacement = displacements[0]
                 lastTime = times[0]
-                for i in range(1, len(times)):
-                    if displacements[i] > lastDisplacement:
-                        xs.append((times[i] - lastTime)/2)
-                        ys.append((displacements[i] - lastDisplacement) / (times[i] - lastTime))
-                        lastDisplacement = displacements[i]
-                        lastTime = times[i]
+                for j in range(1, len(times)):
+                    if displacements[j] > lastDisplacement:# or times[j] - lastTime > 1: #if the displacement has increased or some time has passed
+                        xs.append(lastTime + (times[j] - lastTime)/2)
+                        ys.append((displacements[j] - lastDisplacement) / (times[j] - lastTime))
+                        lastDisplacement = displacements[j]
+                        lastTime = times[j]
 
+                thesesensors.append([sensorname, [xs, ys]])
+            thisrun.append(thesesensors)
+            toreturn.append(thisrun)
+        return toreturn
+
+    def plotRatePercentageSwell(self, runs):
+        self.clear()
+        self.graph.set_ylabel("Rate of swelling (%/m)")
+        self.graph.set_xlabel("Time (m)")
+
+        if len(runs) == 0:
+            self.updateGraph()
+            return
+
+        rates = self.getSwellingRates(runs)
+
+        for [runname, sensorlist] in rates:
+            prefix = runname + " - " if len(runs) > 0 else ""
+            for sensorname, [xs, ys] in sensorlist:
                 self.graph.plot(xs, ys, label=prefix + sensorname)
+
+        self.updateGraph()
 
     def plotAverageSwellingRate(self, runs):
         self.clear()
+        self.graph.set_ylabel("Rate of swelling (%/m)")
         self.graph.set_xlabel("Time (m)")
-        self.graph.set_ylabel("Average rate (%/m)")
 
-        #get number of readings
+        if len(runs) == 0:
+            self.updateGraph()
+            return
 
-        for run in runs:
-            if not run["toshow"]:
+        rates = self.getSwellingRates(runs)
+
+        for [runname, sensorlist] in rates:
+            if len(sensorlist) == 0:
                 continue
+            length = len(sensorlist[0][1][0]) #length of xs
+            sumxs = np.zeros(length)
+            sumys = np.zeros(length)
+            for sensorname, [xs, ys] in sensorlist:
+                sumxs += np.array(xs) #numpy does component-wise operations
+                sumys += np.array(ys)
+            sumxs /= len(sensorlist)
+            sumys /= len(sensorlist)
+            self.graph.plot(xs, ys, label=runname)
 
-            numvalues = len(next(iter(run["sensors"].values()))["pdisplacements"])
-            numsensors = len(run["sensors"])
-
-            sumDisplacements = np.zeros(numvalues)
-            sumTimes = np.zeros(numvalues)
-            for _, sensor in run["sensors"].items():
-                if not sensor["toshow"]:
-                    continue
-
-                sumDisplacements += np.array(sensor["pdisplacements"])
-                sumTimes += np.array(sensor["times"])
-            sumDisplacements /= numsensors
-            sumTimes /= numsensors
-
-            if self.tofilter:
-                sumDisplacements = self.meanFilter(sumDisplacements)
-
-            self.graph.plot(sumTimes, sumDisplacements, label=run["runname"])
         self.updateGraph()
 
     def scaleToLims(self):
