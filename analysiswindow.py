@@ -37,9 +37,9 @@ class AnalysisWindow(Toplevel):
         scrollbar.pack(side=RIGHT, fill=Y)
         importList["show"] = "headings"
         importList.heading("name", text="Name")
-        importList.column("name", minwidth=3000, width=300)
+        importList.column("name", minwidth=300, width=300)
         importList.heading("show", text="Visible")
-        importList.column("show", minwidth=10, width=100)
+        importList.column("show", minwidth=60, width=60)
         importList.pack(side=LEFT, fill=BOTH, expand=True)
 
         self.indexPointers = {} #treeview iid -> sensor/run
@@ -49,7 +49,7 @@ class AnalysisWindow(Toplevel):
 
             newdisplay = not pointed["toshow"]
             pointed["toshow"] = newdisplay
-            importList.set(item, column="show", value=newdisplay)
+            importList.set(item, column="show", value="True" if newdisplay else "False")
 
             if "runname" in pointed: #doubleclicked run
                 for child in importList.get_children(item):
@@ -99,7 +99,7 @@ class AnalysisWindow(Toplevel):
         Button(leftFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
 
         OptionMenu(leftFrame, self.graphmode, "Percentage displacement", "Percentage displacement", 
-            "Average percentage displacement", "Voltages", "Swelling rate", "Average swelling rate", "Total swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
+            "Average percentage displacement", "Voltages", "Swelling rate", "Total swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
         self.setGraphMode()
 
         menubar = Menu(self)
@@ -110,12 +110,21 @@ class AnalysisWindow(Toplevel):
         viewmenu.add_command(label="Edit ranges", command=self.setGraphAxis)
         viewmenu.add_checkbutton(label="Smooth graph",  variable=self.filtermode, command=self.setFilterMode)
         menubar.add_cascade(label="View", menu=viewmenu)
+        fitmenu = Menu(menubar, tearoff=0)
+        fitmenu.add_command(label="Square root", command=self.fitRoot)
+        fitmenu.add_command(label="Logarithmic", command=self.fitLog)
+        menubar.add_cascade(label="Fit", menu=fitmenu)
+        
         self.menubar = menubar
         self.config(menu=menubar)
 
         self.mainloop()
 
-    #def setGraphLimits
+    def fitLog(self):
+        pass
+
+    def fitRoot(self):
+        pass
 
     def setGraphMode(self, _=None):
         runs = [run for _, (_, run) in self.loadedRuns.items()]
