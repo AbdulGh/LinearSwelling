@@ -1,13 +1,13 @@
-import calibration
+from tkinter import *
+from tkinter import filedialog
+from tkinter import messagebox
+from tkinter.ttk import *
+
 import analysiswindow
+import calibration
 import measure
 import tools
-import settings
 
-from tkinter import *
-from tkinter import messagebox
-from tkinter import filedialog
-from tkinter.ttk import *
 
 class MainWindow(Tk): #todo fin on close
     def __init__(self):
@@ -34,6 +34,7 @@ class MainWindow(Tk): #todo fin on close
             calibrationWindow = calibration.CalibrationWindow(self, self.connection)
             self.wait_window(calibrationWindow)
             if calibrationWindow.userFinished:
+                print("back in main")
                 experimentWindow = measure.ExperimentWindow(self, calibrationWindow.getParameters(), self.connection)
                 self.wait_window(experimentWindow)
             self.deiconify()

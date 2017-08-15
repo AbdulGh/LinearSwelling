@@ -1,11 +1,14 @@
-import time
 import os
-import analysisgraph
+import time
 from tkinter import *
 from tkinter import filedialog
-from tkinter import messagebox
 from tkinter import font
+from tkinter import messagebox
 from tkinter.ttk import *
+
+import analysisgraph
+import tools
+
 
 class AnalysisWindow(Toplevel):
     def __init__(self):
@@ -99,7 +102,7 @@ class AnalysisWindow(Toplevel):
         Button(leftFrame, text="Import...", command=self.importData).pack(side=RIGHT, pady=(4,0))
 
         OptionMenu(leftFrame, self.graphmode, "Percentage displacement", "Percentage displacement", 
-            "Average percentage displacement", "Voltages", "Swelling rate", "Total swell", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
+            "Average percentage displacement", "Voltages", "Swelling rate", "Total swell", "MMMGEW", command=self.setGraphMode).pack(side=LEFT, pady=(4, 0))
         self.setGraphMode()
 
         menubar = Menu(self)
@@ -111,22 +114,13 @@ class AnalysisWindow(Toplevel):
         viewmenu.add_checkbutton(label="Smooth graph",  variable=self.filtermode, command=self.setFilterMode)
         menubar.add_cascade(label="View", menu=viewmenu)
         fitmenu = Menu(menubar, tearoff=0)
-        fitmenu.add_command(label="Square root", command=self.fitRoot)
-        fitmenu.add_command(label="Logarithmic", command=self.fitLog)
-        menubar.add_cascade(label="Fit", menu=fitmenu)
         
         self.menubar = menubar
         self.config(menu=menubar)
 
         self.mainloop()
 
-    def fitLog(self):
-        pass
-
-    def fitRoot(self):
-        pass
-
-    def setGraphMode(self, _=None):
+    def setGraphMode(self, event=None):
         runs = [run for _, (_, run) in self.loadedRuns.items()]
         selection = self.graphmode.get()
         if selection == "Percentage displacement":
@@ -141,6 +135,39 @@ class AnalysisWindow(Toplevel):
             self.graph.plotAverageDistance(runs)
         elif selection == "Average swelling rate":
             self.graph.plotAverageSwellingRate(runs)
+        elif selection == "MMMGEW":
+            t = Toplevel(self)
+            t.title("Fit ranges")
+            t.resizable(False, False)
+            paddingFrame = Frame(t)
+            paddingFrame.pack(padx = 8, pady = 8)
+            Label(paddingFrame, text="x begin (m): ").grid(row=0, column=0, sticky=W)
+            xbeginEntry = Entry(paddingFrame)
+            xbeginEntry.insert(0, "0")
+            xbeginEntry.grid(row=0, column=1)
+            Label(paddingFrame, text="x end (m): ").grid(row=1, column=0, sticky=W, pady=(4,0))
+            xendEntry = Entry(paddingFrame)
+            xendEntry.grid(row=1, column=1, pady=(4,0))
+
+            xmin = xend = -1
+            def setRange():
+                nonlocal xmin
+                nonlocal xend
+                xmin = tools.getFloatFromEntry(self, xbeginEntry, "xmin")
+                xend = tools.getFloatFromEntry(self, xendEntry, "xend")
+
+                if xmin is None or xend is None:
+                    return
+                elif xmin >= xend:
+                    messagebox.showerror("Error", "xmin must be less than xend", parent=self)
+                else:
+                    t.destroy()
+
+            Button(paddingFrame, text="Done", command=setRange).grid(row=2, column=1, sticky=E, pady=(4,0))
+            self.wait_window(t)
+            if xend == -1:
+                return
+            self.graph.fitModel(runs, xmin, xend)
         else:
             raise ValueError("Weird dropdown option")
 
@@ -168,6 +195,7 @@ class AnalysisWindow(Toplevel):
 
     def setGraphAxis(self):
         t = Toplevel(self)
+        t.title("Set axis")
         paddingFrame = Frame(t)
         paddingFrame.pack(side=TOP, padx=8, pady=8)
         
@@ -215,15 +243,15 @@ class AnalysisWindow(Toplevel):
                 self.graph.autoscaleX = True
             else:
                 self.graph.autoscaleX = False
-                self.graph.xmin = float(xminEntry.get())
-                self.graph.xmax = float(xmaxEntry.get())
+                self.graph.xmin = tools.getFloatFromEntry(self, xminEntry, "xmin")
+                self.graph.xmax = tools.getFloatFromEntry(self, xmaxEntry, "xmax")
 
             if yautoscale.get() == 1:
                 self.graph.autoscaleY = True
             else:
                 self.graph.autoscaleY = False
-                self.graph.ymin = float(yminEntry.get())
-                self.graph.ymax = float(ymaxEntry.get())
+                self.graph.ymin = tools.getFloatFromEntry(self, yminEntry, "ymin")
+                self.graph.ymax = tools.getFloatFromEntry(self, ymaxEntry, "ymax")
             self.graph.scaleToLims()
             self.setGraphMode()
             t.destroy()
@@ -237,6 +265,7 @@ class AnalysisWindow(Toplevel):
 
     def runInfoDialog(self, run):
         t = Toplevel(self)
+        t.title("Run Information")
         frame = Frame(t)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + run["runname"]).pack(side=TOP)
@@ -262,6 +291,7 @@ class AnalysisWindow(Toplevel):
 
     def sensorInfoDialog(self, sensor):
         t = Toplevel(self)
+        t.title("Sensor Information")
         frame = Frame(t)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
         Label(frame, text="Name: " + sensor["name"]).pack(side=TOP)
@@ -295,6 +325,7 @@ class AnalysisWindow(Toplevel):
 
     def chooseSensorsDialogue(self, names, filename):
         t = Toplevel(self)
+        t.title("Sensors")
         paddingFrame = Frame(t)
         paddingFrame.pack(fill=BOTH, expand=True, padx = 8, pady = 8)
         t.title("Import sensor data")
@@ -371,11 +402,11 @@ class AnalysisWindow(Toplevel):
                     sensors = {sensors[i]["name"]:sensors[i] for i in range(numsensors) if toimport[i]}
                     runs.append({"runname": runname, "timeofrun": timeofrun, "sensors": sensors, "notes":notes, "toshow":True})
             except Exception as e:
-                messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.")
+                messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.", parent=self)
                 raise e
 
         for run in runs:
-            rootid = self.importList.insert("", "end", values=(str(len(self.loadedRuns) + 1) + " - " + run["runname"], ""), open=True, tags=("run"))
+            rootid = self.importList.insert("", "end", values=(str(len(self.loadedRuns) + 1) + " - " + run["runname"], True), open=True, tags=("run"))
             self.loadedRuns[(run["runname"], run["timeofrun"])] = [rootid, run]
             self.indexPointers[rootid] = run
             for name, sensor in run["sensors"].items():

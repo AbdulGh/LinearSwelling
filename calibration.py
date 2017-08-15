@@ -1,16 +1,18 @@
+import datetime
+from math import isnan
 from tkinter import *
-from tkinter import messagebox
 from tkinter import filedialog
-from tkinter.ttk import *
 from tkinter import font
+from tkinter import messagebox
+from tkinter.ttk import *
+
+import matplotlib
 import numpy as np
 from scipy import std
 from scipy.stats import linregress
-from math import isnan
-import tools
-import matplotlib
-import datetime
+
 import settings
+import tools
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -25,7 +27,7 @@ class CalibrationWindow(Toplevel):
         #used by tkinter to update labels
         self.readoutAfterID = None
         self.measurementAfterID = None
-        self.results = [CalibrationWindow.SensorList(i) for i in range(settings.numsensors)]
+        self.results = [CalibrationWindow.SensorList(self, i) for i in range(settings.numsensors)]
         self.resListPointers = {} #treeview ids -> CalibrationResult
         self.userFinished = False #used by other windows to check if the user calibrated successfully
         self.parametersExported = False
@@ -210,10 +212,11 @@ class CalibrationWindow(Toplevel):
             self.SD = std(self.inductionList)
 
     class SensorList:
-        def __init__(self, sensornum):
+        def __init__(self, parent, sensornum):
             self.distances = []
             self.results = []
             self.sensornum = sensornum
+            self.parent = parent
 
         #inserts/merges and returns the result object
         def insert(self, distance, voltageList):
@@ -221,15 +224,26 @@ class CalibrationWindow(Toplevel):
             for i in range(len(self.distances)):
                 if distance == self.distances[i]:
                     self.results[i].merge(voltageList)
+                    iid = self.results[i].iid
+                    newmean = self.results[i].mean
+                    newSD = self.results[i].SD
+                    self.parent.resList.set(iid, column="mean", value=round(newmean, 3))
+                    self.parent.resList.set(iid, column="std", value=round(newSD, 3))
                     return self.results[i]
 
                 if distance < self.distances[i]:
                     self.distances.insert(i, distance)
                     self.results.insert(i, CalibrationWindow.CalibrationResult(distance, voltageList, self.sensornum))
+                    iid = self.parent.resList.insert(self.parent.sensorTreeviewIDs[self.sensornum], "end", values=(distance, self.results[i].mean, round(self.results[i].SD, 3)))
+                    self.results[i].iid = iid
+                    self.parent.resListPointers[iid] = self.results[i]
                     return self.results[i]
 
             self.distances.append(distance)
             result = CalibrationWindow.CalibrationResult(distance, voltageList, self.sensornum)
+            iid = self.parent.resList.insert(self.parent.sensorTreeviewIDs[self.sensornum], "end", values=(distance, round(result.mean, 3), round(result.SD, 3)))
+            result.iid = iid
+            self.parent.resListPointers[iid] = result
             self.results.append(result)
             return result
 
@@ -317,8 +331,6 @@ class CalibrationWindow(Toplevel):
                 if res.mean > self.maxY:
                     self.maxY = res.mean + 1
 
-                res.iid = self.resList.insert(self.sensorTreeviewIDs[sensor], "end", values=(distance, res.mean, round(res.SD, 3)))
-                self.resListPointers[res.iid] = res
                 self.sensorEntries[sensor].delete(0, "end")
                 
             self.replot()

@@ -1,8 +1,7 @@
-from tkinter import messagebox
 import random
+from tkinter import messagebox
+
 import settings
-import sys
-import time
 
 try:
     import PyDAQmx
@@ -80,7 +79,6 @@ class DAQRawOutputDialog(Toplevel):
 
         #init graph
         f = plt.figure()
-        #return
         f.subplots_adjust(hspace=.3)
         dimension = ceil(sqrt(settings.numsensors)) #number of plots on one side of the square grid
         self.sensoraxs = [f.add_subplot(2,2,i+1) for i in range(settings.numsensors)]

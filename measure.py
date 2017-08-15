@@ -1,12 +1,14 @@
-from tkinter import *
-from tkinter import messagebox
-from tkinter import filedialog
-from tkinter.ttk import *
-import tools
-import time
 import os
+import time
+from tkinter import *
+from tkinter import filedialog
+from tkinter import messagebox
+from tkinter.ttk import *
 
 import matplotlib
+
+import tools
+
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.animation
@@ -14,6 +16,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class ExperimentWindow(Toplevel):
     def __init__(self, master, sensorsettings, daqconnection):
+        print("expwindow init start")
         Toplevel.__init__(self, master)
         self.paramList = []
         self.sensors = []
@@ -28,6 +31,7 @@ class ExperimentWindow(Toplevel):
 
         self.running = False
         self.sensorNames = ["Sensor " + str(i+1) for i in self.sensors]
+        self.todisplay = [IntVar(value=1) for _ in self.sensors]
         self.initialThicknesses = [2 for _ in range(len(self.sensors))]
         self.currentPercentageSwelling = None #percentage swelling of ongoing run (becomes a list of lists, one for each sensor)
         self.currentVoltages = None 
@@ -52,6 +56,7 @@ class ExperimentWindow(Toplevel):
         menubar.add_cascade(label="Settings", menu=settingsMenu)
         viewmenu = Menu(menubar, tearoff=0)
         viewmenu.add_command(label="Sensor outputs", command=self.launchOutputWindow)
+        viewmenu.add_command(label="Displayed results", command=self.toShowDialog)
         menubar.add_cascade(label="View", menu=viewmenu)
         self.menubar = menubar
         
@@ -66,6 +71,7 @@ class ExperimentWindow(Toplevel):
         self.lift() #the shell keeps jumping in front for whatever reason
         self.attributes("-topmost", 1)
         self.attributes("-topmost", 0)
+        print("expwindow init end")
 
     def restart(self):
         if messagebox.askyesno("Clear Results", "Are you sure you want to reset the test?", parent=self):
@@ -77,19 +83,22 @@ class ExperimentWindow(Toplevel):
             self.nextUnsavedIndex = None
             self.animation = None
             self.running = False
+            self.todisplay = [IntVar(value=1) for _ in self.sensors]
             self.filename = ""
             self.graph.clear()
             self.graph.set_xlabel("Time (m)")
             self.graph.set_ylabel("Relative swell (%)")
-            self.graph.set_xlim([0, 180])
-            self.graph.set_ylim([95, self.maxY])
+            self.maxX = 1
+            self.maxY = 150
+            self.graph.set_xlim([0, self.maxX])
+            self.graph.set_ylim([0, self.maxY])
 
             self.plots = []
             for i in range(len(self.sensors)):
                 l, = self.graph.plot([], label=self.sensorNames[i])
                 self.plots.append(l)
             h, l = self.graph.get_legend_handles_labels()
-            self.graph.legend(h, l, loc="lower right")
+            self.graph.legend(h, l)
 
             self.canvas.show()
 
@@ -187,7 +196,7 @@ class ExperimentWindow(Toplevel):
                 self.initialThicknesses.append(thickness)
 
             self.sensorNames = values
-            self.graph.legend(labels = self.sensorNames, loc="lower right")
+            self.graph.legend(labels = self.sensorNames)
             self.canvas.show()
             t.destroy()
 
@@ -197,6 +206,14 @@ class ExperimentWindow(Toplevel):
         t.protocol("WM_DELETE_WINDOW", updateSensorSettings)
         t.grab_set()
         self.wait_window(t)
+
+    def toShowDialog(self):
+        t = Toplevel(self)
+        paddingFrame = Frame(t)
+        paddingFrame.pack(side=TOP, fill=BOTH, expand=True, padx=8, pady=8)
+        for i in range(len(self.sensorNames)):
+            Checkbutton(paddingFrame, text=self.sensorNames[i], variable=self.todisplay[i]).pack(side=TOP, pady=(0,4))
+        Button(paddingFrame, text="Done", command=t.destroy).pack(side=TOP, anchor=E)
 
     def initwindow(self):
         mainFrame = Frame(self)
@@ -253,7 +270,7 @@ class ExperimentWindow(Toplevel):
             messagebox.showerror("No readings", "Please take some readings first.", parent=self)
             return
 
-        if self.nextUnsavedIndex >= len(self.currentPercentageSwelling[0]):
+        elif self.nextUnsavedIndex >= len(self.currentPercentageSwelling[0]):
             return #all saved
 
         with open(self.filename, "a+") as f:
@@ -308,8 +325,6 @@ class ExperimentWindow(Toplevel):
 
         rate = self.lastrate = 60000/rate
 
-        self.graph.set_xlim([0, t])
-
         self.stopBtn.config(state=NORMAL)
         self.startBtn.config(state=DISABLED)
         self.timeEntry.config(state=DISABLED)
@@ -354,7 +369,7 @@ class ExperimentWindow(Toplevel):
         self.currentVoltages = [[] for _ in range(len(self.sensors))]
         self.actualTimes = [[] for _ in range(len(self.sensors))]
         self.progressBar.config(maximum=t)
-        self.updateYAxis = False
+        self.updateAxis = False
 
         def takeSingleResult(_):
             if not self.running:
@@ -372,24 +387,32 @@ class ExperimentWindow(Toplevel):
             for i in range(len(self.sensors)):
                 d, v = self.getCurrentDisplacementVoltage(i)
                 d = self.initialReadings[i] - d
-                percentage = 100 + d * multipliers[i]
+                percentage = d * multipliers[i]
                 if (percentage > self.maxY):
                     self.maxY = percentage + 10
-                    self.graph.set_ylim([95, self.maxY])
-                    self.updateYAxis = True
+                    self.graph.set_ylim([0, self.maxY])
+                    self.updateAxis = True
 
                 self.currentPercentageSwelling[i].append(percentage)
                 self.currentVoltages[i].append(v)
-                self.actualTimes[i].append((time.time() - self.lastStartTime) / 60)
+                thistime = (time.time() - self.lastStartTime) / 60
+                self.actualTimes[i].append(thistime)
                 plot = self.plots[i]
-                plot.set_data(self.actualTimes[i], self.currentPercentageSwelling[i])
+                if self.todisplay[i].get() == 1:
+                    if thistime > self.maxX:
+                        self.maxX = min(self.maxX * 2, t)
+                        self.graph.set_xlim([0, self.maxX])
+                        self.updateAxis = True
+                    plot.set_data(self.actualTimes[i], self.currentPercentageSwelling[i])
+                else:
+                    plot.set_data([], [])
 
             if mins >= t:
                 self.stopRecording()
 
-            if self.updateYAxis:
+            if self.updateAxis:
                 self.canvas.draw()
-                self.updateYAxis = False
+                self.updateAxis = False
 
             return self.plots
 
@@ -418,15 +441,16 @@ class ExperimentWindow(Toplevel):
         a = f.add_subplot(111)
         a.set_xlabel("Time (m)")
         a.set_ylabel("Relative swell (%)")
+        self.maxX = 1
         self.maxY = 150
-        a.set_xlim([0,180])
-        a.set_ylim([95,self.maxY])
+        a.set_xlim([0,self.maxX])
+        a.set_ylim([0,self.maxY])
         self.plots = []
         for i in range(len(self.sensors)):
             l, = a.plot([], label=self.sensorNames[i], animated=True)
             self.plots.append(l)
         h, l = a.get_legend_handles_labels()
-        a.legend(h, l, loc="lower right")
+        a.legend(h, l)
         self.graph = a
 
         wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)

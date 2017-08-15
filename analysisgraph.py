@@ -1,10 +1,13 @@
 from tkinter import *
+
 import matplotlib
+
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
 import numpy as np
 from math import floor
+import scipy.optimize
 
 class AnalysisGraph(Frame):
     def __init__(self, master): #master must be an AnalysisWindow
@@ -35,8 +38,8 @@ class AnalysisGraph(Frame):
                 savelims()
                 self.parent.autoscaleX = self.parent.autoscaleY = False
 
-            def press_zoom(self, event):
-                NavigationToolbar2TkAgg.press_zoom(self, event)
+            def release_zoom(self, event):
+                NavigationToolbar2TkAgg.release_zoom(self, event)
                 savelims()
                 self.parent.autoscaleX = self.parent.autoscaleY = False
 
@@ -48,19 +51,6 @@ class AnalysisGraph(Frame):
 
     def clear(self):
         self.graph.clear()
-
-    """
-    def setLims(self, xmin=None, xmax=None, ymin=None, ymax=None):
-        if xmin is not None:
-            self.xmin = xmin
-        if xmax is not None:
-            self.xmax = xmax
-        if ymin is not None:
-            self.ymin = ymin
-        if ymax is not None:
-            self.ymax = ymax
-        self.scaleToLims()
-    """
 
     """Returns [xmin, xmax, ymin, ymax]"""
     def getCurrentLims(self):
@@ -75,6 +65,55 @@ class AnalysisGraph(Frame):
         missed = floor(length/2)
         return np.concatenate((ys[:missed], valid, ys[-missed + 1:]))
 
+    def fitModel(self, runs, xmin, xmax):
+        self.clear()
+        self.graph.set_xlabel("Time (m)")
+        self.graph.set_ylabel("Displacement (%)")
+
+        def MMMGEW(times, a, b):
+            sigmaterms = np.zeros(len(times))
+            btimes = -b * times
+            for n in range(0, 100):
+                lambdaterm = ((n+0.5)*np.pi)**2
+                sigmaterms += (1 / lambdaterm) * np.exp(lambdaterm * btimes)
+            return a * (1 - 2 * sigmaterms)
+
+        for run in runs:
+            times = []
+            displacements = []
+            for _, sensor in run["sensors"].items():
+                if not sensor["toshow"]:
+                    continue
+                times.append(sensor["times"])
+                displacements.append(sensor["pdisplacements"])
+
+            times, displacements = self.getAverages(times, displacements, len(run["sensors"]))
+
+            startindex = 0
+            while times[startindex] < xmin:
+                startindex += 1
+            startindex = max(0, startindex - 1)
+
+            endindex = startindex
+            while times[endindex] < xmax:
+                endindex += 1
+
+            times = np.array(times[startindex:endindex]) / 60
+            times -= times[0]
+            displacements = self.meanFilter(displacements[startindex:endindex])
+            self.graph.plot(times, displacements, label=run["runname"] + " - average")
+            [a, b], _ = scipy.optimize.curve_fit(MMMGEW, times, displacements)
+
+            estimatedy = MMMGEW(times, a, b)
+            print(a, b)
+            self.graph.plot(times, estimatedy, label=run["runname"] + " - estimate")
+
+        self.graph.autoscale(True)
+        h, l = self.graph.get_legend_handles_labels()
+        self.graph.legend(h, l)
+        self.canvas.draw()
+        self.toolbar.update()
+
     def plotDistances(self, runs):
         self.clear()
         self.graph.set_xlabel("Time (m)")
@@ -84,7 +123,6 @@ class AnalysisGraph(Frame):
             run = runs[i]
             if not run["toshow"]:
                 continue
-
 
             prefix = str(i+1) + " - " if len(runs) > 1 else ""
             if self.tofilter:
@@ -99,34 +137,45 @@ class AnalysisGraph(Frame):
                     self.graph.plot(sensor["times"], sensor["pdisplacements"], label=prefix + sensorname)
         self.updateGraph()
 
+    def getAverages(self, xss, yss, numsensors):
+        sumxss = np.zeros(len(xss[0]))
+        for xs in xss:
+            sumxss += np.array(xs)
+        sumxss /= numsensors
+
+        sumyss = np.zeros(len(yss[0]))
+        for ys in yss:
+            sumyss += np.array(ys)
+        sumyss /= numsensors
+
+        return sumxss, sumyss
+
     def plotAverageDistance(self, runs):
         self.clear()
         self.graph.set_xlabel("Time (m)")
         self.graph.set_ylabel("Average swell (%)")
 
         #get number of readings
-
         for run in runs:
             if not run["toshow"]:
                 continue
 
-            numvalues = len(next(iter(run["sensors"].values()))["pdisplacements"])
+            numvalues = len(next(iter(run["sensors"].values()))["pdisplacements"]) #sensors in each run should have the same number of readings - get any
             numsensors = len(run["sensors"])
 
-            sumDisplacements = np.zeros(numvalues)
-            sumTimes = np.zeros(numvalues)
+            toavgtimes = []
+            toavgdisplacement = []
             for _, sensor in run["sensors"].items():
                 if not sensor["toshow"]:
                     continue
-                sumDisplacements += np.array(sensor["pdisplacements"])
-                sumTimes += np.array(sensor["times"])
-            sumDisplacements /= numsensors
-            sumTimes /= numsensors
+                toavgdisplacement.append(sensor["pdisplacements"])
+                toavgtimes.append(sensor["times"])
 
+            avgT, avgD = self.getAverages(toavgtimes, toavgdisplacement, numsensors)
             if self.tofilter:
-                sumDisplacements = self.meanFilter(sumDisplacements)
+                avgD = self.meanFilter(avgD)
 
-            self.graph.plot(sumTimes, sumDisplacements, label=run["runname"])
+            self.graph.plot(avgT, avgD, label=run["runname"])
 
         self.updateGraph()
 
@@ -182,7 +231,6 @@ class AnalysisGraph(Frame):
         self.canvas.draw()
         self.toolbar.update()
 
-
     """returns [[runname, [sensorname, [[xs], [ys]]...]...]"""
     def getSwellingRates(self, runs):
         toreturn = []
@@ -196,7 +244,7 @@ class AnalysisGraph(Frame):
                 if not sensor["toshow"]:
                     continue
 
-                displacements = sensor["pdisplacements"]
+                displacements = self.meanFilter(sensor["pdisplacements"])
                 times = sensor["times"]
 
                 if len(times) <= 1:
@@ -207,7 +255,7 @@ class AnalysisGraph(Frame):
                 lastDisplacement = displacements[0]
                 lastTime = times[0]
                 for j in range(1, len(times)):
-                    if displacements[j] > lastDisplacement:# or times[j] - lastTime > 1: #if the displacement has increased or some time has passed
+                    if displacements[j] - lastDisplacement > 0.5 or times[j] - lastTime > 2: #if the displacement has increased or some time has passed
                         xs.append(lastTime + (times[j] - lastTime)/2)
                         ys.append((displacements[j] - lastDisplacement) / (times[j] - lastTime))
                         lastDisplacement = displacements[j]
@@ -230,7 +278,7 @@ class AnalysisGraph(Frame):
         rates = self.getSwellingRates(runs)
 
         for [runname, sensorlist] in rates:
-            prefix = runname + " - " if len(runs) > 0 else ""
+            prefix = runname + " - " if len(runs) > 1 else ""
             for sensorname, [xs, ys] in sensorlist:
                 self.graph.plot(xs, ys, label=prefix + sensorname)
 
