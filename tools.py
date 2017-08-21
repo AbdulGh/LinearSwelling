@@ -1,3 +1,4 @@
+import os
 import random
 from tkinter import messagebox
 
@@ -9,6 +10,14 @@ try:
     from PyDAQmx.DAQmxConstants import *
 except Exception as e:
     pass #handled later
+
+def uniqueName(name):
+    if not os.path.exists(name):
+        return name
+    counter = 1
+    while os.path.exists(name + " - " + str(counter)):
+        counter += 1
+    return name + " - " + str(counter)
         
 def getFloatFromEntry(master, entry, name, mini=None, maxi=None, forceInt=False):
         s = entry.get()
@@ -24,6 +33,18 @@ def getFloatFromEntry(master, entry, name, mini=None, maxi=None, forceInt=False)
                 return i
         except ValueError:
             messagebox.showerror("Error", "Value for '" + name + "' is not numerical.", parent=master)
+
+def isOne(intvar):
+    return intvar.get() == 1
+
+def setAll(frame, state):
+    for child in frame.winfo_children():
+        try:
+            if child.winfo_children():
+                setAll(child, state)
+            child.configure(state=state)
+        except TclError: #is a label or something
+            pass
 
 class DAQInput():
     def __init__(self):
