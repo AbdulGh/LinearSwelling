@@ -24,12 +24,12 @@ class CalibrationWindow(Toplevel):
         self.title("Swellometer calibration")
         self.connection = daqconnection
 
-        #used by tkinter to update labels
+        # used by tkinter to update labels
         self.readoutAfterID = None
         self.measurementAfterID = None
         self.results = [CalibrationWindow.SensorList(self, i) for i in range(settings.numsensors)]
-        self.resListPointers = {} #treeview ids -> CalibrationResult
-        self.userFinished = False #used by other windows to check if the user calibrated successfully
+        self.resListPointers = {}  # treeview ids -> CalibrationResult
+        self.userFinished = False  # used by other windows to check if the user calibrated successfully
         self.parametersExported = False
         self.outputWindow = None
 
@@ -46,7 +46,7 @@ class CalibrationWindow(Toplevel):
 
         self.plotColours = ["red", "blue", "black", "green"]
 
-        self.protocol('WM_DELETE_WINDOW', self.fin)
+        self.protocol("WM_DELETE_WINDOW", self.fin)
 
         self.initwindow()
         self.resizable(False, False)
@@ -63,16 +63,16 @@ class CalibrationWindow(Toplevel):
 
     def initwindow(self):
         mainFrame = Frame(self)
-        mainFrame.pack(side=TOP, fill=BOTH, expand=True, padx=8, pady=(8,4))
+        mainFrame.pack(side=TOP, fill=BOTH, expand=True, padx=8, pady=(8, 4))
 
         leftFrame = Frame(mainFrame)
-        leftFrame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0,8))
+        leftFrame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 8))
 
         inputFrame = Frame(leftFrame)
         inputFrame.grid(row=0, column=0, rowspan=3, columnspan=3)
 
         self.sensorEntries = []
-        #used to check which sensors are enabled
+        # used to check which sensors are enabled
         self.sensorCheckedVars = []
         self.checkbuttons = []
 
@@ -80,8 +80,8 @@ class CalibrationWindow(Toplevel):
             var = IntVar()
             var.set(1)
             self.sensorCheckedVars.append(var)
-            checkbutton = Checkbutton(inputFrame, text="Distance " + str(i+1) + " (mm): ", width=20, variable=var,
-                                                command=lambda i=i: self.switchEntry(i))
+            checkbutton = Checkbutton(inputFrame, text="Distance " + str(i + 1) + " (mm): ", width=20, variable=var,
+                                      command=lambda i=i: self.switchEntry(i))
             checkbutton.grid(row=i, column=0, pady=4)
             self.checkbuttons.append(checkbutton)
             entry = Entry(inputFrame)
@@ -107,22 +107,23 @@ class CalibrationWindow(Toplevel):
         self.measurementFrame = measurementFrame
 
         cancelBtn = Button(measurementFrame, text="Cancel", command=self.stopReadings)
-        cancelBtn.grid(row=0, column=0, padx=2, pady=(10,2))
+        cancelBtn.grid(row=0, column=0, padx=2, pady=(10, 2))
         cancelBtn.config(state=DISABLED)
         self.cancelBtn = cancelBtn
         startBtn = Button(measurementFrame, text="Start", command=self.startReadings)
-        startBtn.grid(row=0, column=1, padx=2, pady=(10,2))
+        startBtn.grid(row=0, column=1, padx=2, pady=(10, 2))
         self.startBtn = startBtn
 
         curNumTaken = Label(measurementFrame, text="Readings taken: 0")
-        curNumTaken.grid(row=1, column=0, columnspan=2, pady=(2,10))
+        curNumTaken.grid(row=1, column=0, columnspan=2, pady=(2, 10))
         self.curNumTaken = curNumTaken
 
         listFrame = Frame(leftFrame, width=50, borderwidth=1, relief=GROOVE)
         listFrame.grid(row=10, rowspan=13, column=0, columnspan=3, sticky=N + S + W + E)
         leftFrame.rowconfigure(10, weight=1)
         scrollbar = Scrollbar(listFrame)
-        resList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED, columns=("distance", "mean", "std"))
+        resList = Treeview(listFrame, yscrollcommand=scrollbar.set, selectmode=EXTENDED,
+                           columns=("distance", "mean", "std"))
         scrollbar.config(command=resList.yview)
         resList["show"] = "headings"
         resList.heading("distance", text="Distance (mm)")
@@ -145,23 +146,23 @@ class CalibrationWindow(Toplevel):
 
             def deleteObject(self):
                 self.master.deleteReading(self.iid)
-                
+
         self.resListPopup = ResListPopup(self)
 
         def resListRightClick(event):
             iid = resList.identify_row(event.y)
-            if iid and resList.item(iid)["tags"] == '': #is not a 'sensor' header
+            if iid and resList.item(iid)["tags"] == '':  # is not a 'sensor' header
                 resList.selection_set(iid)
                 self.resListPopup.popup(event.x_root, event.y_root, iid)
             else:
                 pass
-            
+
         resList.bind("<Button-3>", resListRightClick)
-                
+
         titleFont = font.Font(family='Helvetica', size=10, weight='bold')
         resList.tag_configure("title", font=titleFont)
 
-        self.sensorTreeviewIDs = [] #sensor number -> treeview iid
+        self.sensorTreeviewIDs = []  # sensor number -> treeview iid
         for i in range(settings.numsensors):
             iid = resList.insert("", "end", i, values=("Sensor " + str(i + 1),), open=True, tags=("title",))
             self.sensorTreeviewIDs.append(iid)
@@ -172,20 +173,20 @@ class CalibrationWindow(Toplevel):
         self.resList = resList
 
         graph = self.initGraphFrame(mainFrame)
-        graph.pack(side=RIGHT, fill=BOTH, expand=True, padx=(0,2))
+        graph.pack(side=RIGHT, fill=BOTH, expand=True, padx=(0, 2))
 
         bottomBtnFrame = Frame(self)
         bottomBtnFrame.pack(side=BOTTOM, fill=X)
         exitBtn = Button(bottomBtnFrame, text="Done", command=self.fin)
-        exitBtn.pack(side=RIGHT, pady=(0,8), padx=(0,8))
+        exitBtn.pack(side=RIGHT, pady=(0, 8), padx=(0, 8))
 
     def launchOutputWindow(self):
-        if self.outputWindow is None or not self.outputWindow.winfo_exists(): #closed or was never opened
+        if self.outputWindow is None or not self.outputWindow.winfo_exists():  # closed or was never opened
             self.outputWindow = tools.DAQRawOutputDialog(self, self.connection)
             self.outputWindow.mainloop()
         else:
             self.outputWindow.lift()
-            
+
     class CalibrationResult:
         def __init__(self, dist, inductionList, sensor):
             self.dist = dist
@@ -204,8 +205,8 @@ class CalibrationWindow(Toplevel):
             for i in range(len(self.inductionList)):
                 string += str(i) + " - " + str(self.inductionList[i]) + "\n"
             return string
-        
-        def merge(self, merginglist): #absorb a list of readings and update stats
+
+        def merge(self, merginglist):  # absorb a list of readings and update stats
             self.inductionList += merginglist
             self.num = len(self.inductionList)
             self.mean = sum(self.inductionList) / len(self.inductionList)
@@ -218,9 +219,9 @@ class CalibrationWindow(Toplevel):
             self.sensornum = sensornum
             self.parent = parent
 
-        #inserts/merges and returns the result object
+        # inserts/merges and returns the result object
         def insert(self, distance, voltageList):
-            #could be done with a heap but there is going to be max 20 readings per sensor
+            # could be done with a heap but there is going to be max 20 readings per sensor
             for i in range(len(self.distances)):
                 if distance == self.distances[i]:
                     self.results[i].merge(voltageList)
@@ -234,14 +235,16 @@ class CalibrationWindow(Toplevel):
                 if distance < self.distances[i]:
                     self.distances.insert(i, distance)
                     self.results.insert(i, CalibrationWindow.CalibrationResult(distance, voltageList, self.sensornum))
-                    iid = self.parent.resList.insert(self.parent.sensorTreeviewIDs[self.sensornum], "end", values=(distance, self.results[i].mean, round(self.results[i].SD, 3)))
+                    iid = self.parent.resList.insert(self.parent.sensorTreeviewIDs[self.sensornum], "end", values=(
+                    distance, self.results[i].mean, round(self.results[i].SD, 3)))
                     self.results[i].iid = iid
                     self.parent.resListPointers[iid] = self.results[i]
                     return self.results[i]
 
             self.distances.append(distance)
             result = CalibrationWindow.CalibrationResult(distance, voltageList, self.sensornum)
-            iid = self.parent.resList.insert(self.parent.sensorTreeviewIDs[self.sensornum], "end", values=(distance, round(result.mean, 3), round(result.SD, 3)))
+            iid = self.parent.resList.insert(self.parent.sensorTreeviewIDs[self.sensornum], "end",
+                                             values=(distance, round(result.mean, 3), round(result.SD, 3)))
             result.iid = iid
             self.parent.resListPointers[iid] = result
             self.results.append(result)
@@ -267,7 +270,7 @@ class CalibrationWindow(Toplevel):
             f.write("Calibration report - " + str(datetime.datetime.now()) + "\n")
             for s in range(settings.numsensors):
                 results = self.results[s].results
-                string = "\n***Sensor " + str(s+1) + "***\n"
+                string = "\n***Sensor " + str(s + 1) + "***\n"
                 string += "Total # of distinct distances: " + str(len(results)) + "\n"
                 for i in range(len(results)):
                     string += "---Reading " + str(i) + "---\n"
@@ -291,12 +294,12 @@ class CalibrationWindow(Toplevel):
             self.switchEntry()
 
     def startReadings(self):
-        toRecord = [] #list of enabled sensor numbers
+        toRecord = []  # list of enabled sensor numbers
         distances = []
         for i in range(settings.numsensors):
             if self.sensorCheckedVars[i].get() == 1:
                 toRecord.append(i)
-                d = tools.getFloatFromEntry(self, self.sensorEntries[i], "Sensor " + str(i+1), mini=0.1)
+                d = tools.getFloatFromEntry(self, self.sensorEntries[i], "Sensor " + str(i + 1), mini=0.1)
                 if d is None:
                     return
                 distances.append(d)
@@ -312,31 +315,32 @@ class CalibrationWindow(Toplevel):
 
         self.enableSensors(False)
 
-        rate = int(1000/rate)
+        rate = int(1000 / rate)
         totalNo = int(totalNo)
-        currentReadings = [[] for i in range(len(toRecord))] #lists of intermediate results for this reading (averaged later)
+        currentReadings = [[] for i in
+                           range(len(toRecord))]  # lists of intermediate results for this reading (averaged later)
         self.curNumTaken.config(text="Readings taken: 0/" + str(totalNo))
 
-        def addResults(): #called when a single averaged reading is to be added
+        def addResults():  # called when a single averaged reading is to be added
             self.parametersExported = False
             self.stopReadings()
             for i in range(len(toRecord)):
                 sensor = toRecord[i]
                 distance = distances[i]
 
-                #check if the graph fits everything
+                # check if the graph fits everything
                 if distance > self.maxX:
                     self.maxX = distance + 1
-                res = self.results[sensor].insert(distance, currentReadings[i]) #handles merging, averaging etc.
+                res = self.results[sensor].insert(distance, currentReadings[i])  # handles merging, averaging etc.
                 if res.mean > self.maxY:
                     self.maxY = res.mean + 1
 
                 self.sensorEntries[sensor].delete(0, "end")
-                
+
             self.replot()
 
         def takeSingleReading():
-            if len(currentReadings[0]) == totalNo: #done
+            if len(currentReadings[0]) == totalNo:  # done
                 addResults()
                 self.stopReadings()
                 return
@@ -366,8 +370,8 @@ class CalibrationWindow(Toplevel):
         a.set_ylabel("Inductance (V)")
         self.maxX = 10
         self.maxY = settings.maxDAQoutput
-        a.set_xlim([0,self.maxX])
-        a.set_ylim([0,self.maxY])
+        a.set_xlim([0, self.maxX])
+        a.set_ylim([0, self.maxY])
         self.graph = a
 
         wrapper = Frame(fr, relief=SUNKEN, borderwidth=1)
@@ -384,28 +388,29 @@ class CalibrationWindow(Toplevel):
         self.graph.set_xlim([0, self.maxX])
         self.graph.set_ylim([0, self.maxY])
 
-        lin = np.linspace(0, self.maxX, num=self.maxX*20)
+        lin = np.linspace(0, self.maxX, num=self.maxX * 20)
 
         for s in range(settings.numsensors):
             xs, ys = self.results[s].getPoints()
             if len(xs) == 0:
                 continue
-            self.graph.scatter(xs, ys, c=self.plotColours[s], label="Sensor " + str(s+1))
+            self.graph.scatter(xs, ys, c=self.plotColours[s], label="Sensor " + str(s + 1))
             if len(xs) > 1:
                 m, b = linregress(xs, ys)[:2]
-                self.graph.plot(lin, m * lin + b, c = self.plotColours[s])
+                self.graph.plot(lin, m * lin + b, c=self.plotColours[s])
 
         self.graph.set_xlabel("Distance (mm)")
         self.graph.set_ylabel("Inductance (V)")
 
-        h,l = self.graph.get_legend_handles_labels()
-        self.graph.legend(h,l)
+        h, l = self.graph.get_legend_handles_labels()
+        self.graph.legend(h, l)
 
         self.canvas.draw()
 
-    #exports list of [sensornum, m, b]
+    # exports list of [sensornum, m, b]
     def exportParameters(self):
-        f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".calib", filetypes=[("Calibration File", "*.calib")])
+        f = filedialog.asksaveasfile(mode='w', parent=self, defaultextension=".calib",
+                                     filetypes=[("Calibration File", "*.calib")])
         if f is not None:
             parameters = self.getParameters()
             for sensorparams in parameters:
@@ -415,15 +420,15 @@ class CalibrationWindow(Toplevel):
                 f.write("\n")
         self.parametersExported = True
 
-    #returns [[sensornum, m, b]...]
+    # returns [[sensornum, m, b]...]
     def getParameters(self):
         params = []
         for i in range(settings.numsensors):
             xs, ys = self.results[i].getPoints()
             if len(xs) < 2:
                 continue
-            #other way around as we later relate voltage to distance
-            #throw away r-value, stderr etc
+            # other way around as we later relate voltage to distance
+            # throw away r-value, stderr etc
             m, b = linregress(ys, xs)[:2]
             if isnan(m) or isnan(b):
                 messagebox.showwarning("Vertical regression", "Could not form a line for sensor " + str(i))
@@ -459,7 +464,8 @@ class CalibrationWindow(Toplevel):
                 return False
 
         if not self.parametersExported:
-            res = messagebox.askyesno("Parameters not saved", "Do you want to save the calibration parameters?", parent=self)
+            res = messagebox.askyesno("Parameters not saved", "Do you want to save the calibration parameters?",
+                                      parent=self)
             if res:
                 self.exportParameters()
 
@@ -467,6 +473,6 @@ class CalibrationWindow(Toplevel):
         if self.outputWindow is not None and self.outputWindow.winfo_exists():
             self.outputWindow.destroy()
         self.destroy()
-        
+
 if __name__ == '__main__':
     print("Run main.py")
