@@ -62,15 +62,6 @@ class AnalysisGraph(Frame):
     def getCurrentLims(self):
         return self.graph.get_xlim() + self.graph.get_ylim()
 
-    def meanFilter(self, ys, n=7):
-        length = min(len(ys), n)
-        if length % 2 != 0:
-            length += 1
-        mask = np.ones(length) / length
-        valid = list(np.convolve(ys, mask, mode="valid"))
-        missed = floor(length / 2)
-        return np.concatenate((ys[:missed], valid, ys[-missed + 1:]))
-
     def FIRFilterNonUniform(self, x, y):
         averageDiff = np.mean(np.diff(x))
         gridX, step = np.linspace(x[0], x[-1], np.ceil(x[-1]/averageDiff), retstep=True)
@@ -129,7 +120,9 @@ class AnalysisGraph(Frame):
 
             times = np.array(times[startindex:endindex]) / 60
             times -= times[0]
-            displacements = self.meanFilter(displacements[startindex:endindex])
+            displacements = displacements[startindex:endindex]
+            if self.tofilter:
+                times, displacements = self.FIRFilterNonUniform(times, displacements)
             self.graph.plot(times, displacements, label=runname + " - average")
             [a, b], _ = scipy.optimize.curve_fit(MMMGEW, times, displacements)
             params[runname] = [a, b]
@@ -209,7 +202,7 @@ class AnalysisGraph(Frame):
             avgT = self.getAverages(toavgtimes, numsensors)
             avgD = self.getAverages(toavgdisplacement, numsensors)
             if self.tofilter:
-                avgD = self.meanFilter(avgD)
+                avgT, avgD = self.FIRFilterNonUniform(avgT, avgD)
 
             self.graph.plot(avgT, avgD, label=run["runname"])
 
@@ -235,7 +228,8 @@ class AnalysisGraph(Frame):
                 for sensorname, sensor in run["sensors"].items():
                     if not sensor["toshow"]:
                         continue
-                    self.graph.plot(sensor["times"], self.meanFilter(sensor["voltages"]), label=prefix + sensorname)
+                    times, voltages = self.FIRFilterNonUniform(sensor["times"], sensor["voltages"])
+                    self.graph.plot(times, voltages, label=prefix + sensorname)
             else:
                 for sensorname, sensor in run["sensors"].items():
                     if not sensor["toshow"]:
@@ -278,7 +272,7 @@ class AnalysisGraph(Frame):
         self.toolbar.update()
 
     def getDiscreteDerative(self, times, inys):
-        displacements = self.meanFilter(inys)
+        times, displacements = self.FIRFilterNonUniform(times, inys)
         xs = []
         ys = []
         lastDisplacement = displacements[0]

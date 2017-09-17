@@ -13,9 +13,6 @@ import reportgen
 import tools
 import xlwt
 
-from scipy.interpolate import griddata
-import numpy as np
-
 class AnalysisWindow(Toplevel):
     def __init__(self):
         Toplevel.__init__(self)
@@ -93,12 +90,8 @@ class AnalysisWindow(Toplevel):
                     self.master.sensorInfoDialog(pointed)
 
             def renameObject(self):
-                parent = self.master.importList.parent(self.id)
-                if parent:
-                    run = self.master.indexPointers[parent]
-                else:
-                    run = self.master.indexPointers[self.id]
-                self.master.renameDialog(run)
+                self.master.renameDialog(self.id)
+
 
             def deleteObject(self):
                 self.master.deleteObject(self.id)
@@ -139,7 +132,6 @@ class AnalysisWindow(Toplevel):
         viewmenu.add_command(label="Fit model", command=self.fitModel)
         viewmenu.add_checkbutton(label="Smooth graph", variable=self.filtermode, command=self.setFilterMode)
         menubar.add_cascade(label="View", menu=viewmenu)
-        fitmenu = Menu(menubar, tearoff=0)
 
         self.menubar = menubar
         self.config(menu=menubar)
@@ -462,7 +454,13 @@ class AnalysisWindow(Toplevel):
         self.wait_window(t)
         return [n.get() == 1 for n in self.checkboxVars]
 
-    def renameDialog(self, run):
+    def renameDialog(self, iid):
+        parent = self.master.importList.parent(iid)
+        if parent:
+            run = self.master.indexPointers[parent]
+        else:
+            run = self.master.indexPointers[iid]
+
         t = Toplevel(self)
         t.title("Rename")
         paddingFrame = Frame(t)
@@ -473,7 +471,8 @@ class AnalysisWindow(Toplevel):
         runEntry.grid(row=0, column=1, pady=(0,4))
         sensorList = run["sensors"].items()
         oldSensorNames = [name for name, _ in sensorList]
-        sensorEntries = [Entry(paddingFrame) for name in oldSensorNames]
+        sensorEntries = [Entry(paddingFrame) for _ in oldSensorNames]
+        t.resizable(False, False)
         i = 0
         while i < len(sensorList):
             Label(paddingFrame, text="Sensor name:").grid(row=i+1, column=0, pady=(0,4))
@@ -532,10 +531,10 @@ class AnalysisWindow(Toplevel):
                             line = oldfile.readline()
                         oldfile.close()
                     newfile.close()
-                os.remove(run["filename"])
                 shutil.move(tempPath, run["filename"])
                 os.close(handle)
                 t.destroy()
+                messagebox.showinfo("Success", "Changes have been saved", parent=self)
             except:
                 messagebox.showerror("Error", "Could not rename sensors.", parent=self)
                 raise
@@ -543,7 +542,70 @@ class AnalysisWindow(Toplevel):
         Button(paddingFrame, text="Save", command=doRename).grid(row=i+1, column=1, sticky=E)
         t.grab_set()
         self.wait_window(t)
-        messagebox.showinfo("Success", "Changes have been saved (reload to see)", parent=self)
+        self.deleteObject(iid, warn=False)
+        self.importRun(run["filename"])
+
+    def importRun(self, filename):
+        try:
+            with open(filename, "r") as f:
+                runname = f.readline()[:-1]
+
+                f.readline()  # throw away human-readable date
+                timeofrun = time.localtime(float(f.readline()[:-1]))
+
+                if (runname, timeofrun) in self.loadedRuns:
+                    res = messagebox.askyesno("Reload run", "Do you want to reload '" + runname + "'?", parent=self)
+                    if not res:
+                        return None
+                    else:
+                        iid, _ = self.loadedRuns[(runname, timeofrun)]
+                        self.deleteObject(iid, warn=False)
+                f.readline()  # 'Notes:'
+                notes = ""
+                while True:  # notes are delimited by single backslash
+                    c = f.read(1)
+                    if not c:
+                        raise ValueError("Unexpected EOF")
+                    if c == '\\':
+                        c = f.read(1)
+                        if c == '\\':
+                            notes += '\\'
+                        else:
+                            break
+                    notes += c
+                numsensors = int(f.readline().split()[2])
+                f.readline()  # Sensor names:
+                sensors = [
+                    {"name": f.readline()[:-1], "times": [], "pdisplacements": [], "voltages": [], "toshow": True}
+                    for _ in range(numsensors)]
+                f.readline()  # "Initial thicknesses(mm) - Initial displacements(mm):
+                for i in range(numsensors):
+                    thicc, _, displacement = f.readline().split()
+                    sensors[i]["initialThickness"] = float(thicc)
+                    sensors[i]["initialDisplacement"] = float(displacement)
+                f.readline()  # 'Time(m) - Displacement(%) - Voltage(V)'
+                f.readline()  # newline
+
+                line = f.readline()
+                while line:
+                    data = line.split()
+                    for i in range(0, numsensors):
+                        index = i * 3
+                        sensors[i]["times"].append(float(data[index]))
+                        sensors[i]["pdisplacements"].append(float(data[index + 1]))
+                        sensors[i]["voltages"].append(float(data[index + 2]))
+                    line = f.readline()
+
+                toimport = self.chooseSensorsDialogue([sensors[i]["name"] for i in range(numsensors)], filename)
+                sensors = {sensors[i]["name"]: sensors[i] for i in range(numsensors) if toimport[i]}
+                run = {"runname": runname, "timeofrun": timeofrun, "sensors": sensors, "notes": notes,
+                             "toshow": True, "filename": filename}
+                f.close()
+                return run
+        except Exception as e:
+            messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.",
+                                 parent=self)
+            raise e
 
     def importData(self):
         filenames = filedialog.askopenfilenames(parent=self, defaultextension=".data",
@@ -551,66 +613,7 @@ class AnalysisWindow(Toplevel):
         if not filenames:
             return
 
-        runs = []
-        for filename in filenames:
-            try:
-                with open(filename, "r") as f:
-                    runname = f.readline()[:-1]
-
-                    f.readline()  # throw away human-readable date
-                    timeofrun = time.localtime(float(f.readline()[:-1]))
-
-                    if (runname, timeofrun) in self.loadedRuns:
-                        res = messagebox.askyesno("Reload run", "Do you want to reload '" + runname + "'?", parent=self)
-                        if not res:
-                            continue
-                        else:
-                            iid, _ = self.loadedRuns[(runname, timeofrun)]
-                            self.deleteObject(iid, warn=False)
-                    f.readline()  # 'Notes:'
-                    notes = ""
-                    while True:  # notes are delimited by single backslash
-                        c = f.read(1)
-                        if not c:
-                            raise ValueError("Unexpected EOF")
-                        if c == '\\':
-                            c = f.read(1)
-                            if c == '\\':
-                                notes += '\\'
-                            else:
-                                break
-                        notes += c
-                    numsensors = int(f.readline().split()[2])
-                    f.readline()  # Sensor names:
-                    sensors = [
-                        {"name": f.readline()[:-1], "times": [], "pdisplacements": [], "voltages": [], "toshow": True}
-                        for _ in range(numsensors)]
-                    f.readline()  # "Initial thicknesses(mm) - Initial displacements(mm):
-                    for i in range(numsensors):
-                        thicc, _, displacement = f.readline().split()
-                        sensors[i]["initialThickness"] = float(thicc)
-                        sensors[i]["initialDisplacement"] = float(displacement)
-                    f.readline()  # 'Time(m) - Displacement(%) - Voltage(V)'
-                    f.readline()  # newline
-
-                    line = f.readline()
-                    while line:
-                        data = line.split()
-                        for i in range(0, numsensors):
-                            index = i * 3
-                            sensors[i]["times"].append(float(data[index]))
-                            sensors[i]["pdisplacements"].append(float(data[index + 1]))
-                            sensors[i]["voltages"].append(float(data[index + 2]))
-                        line = f.readline()
-
-                    toimport = self.chooseSensorsDialogue([sensors[i]["name"] for i in range(numsensors)], filename)
-                    sensors = {sensors[i]["name"]: sensors[i] for i in range(numsensors) if toimport[i]}
-                    runs.append({"runname": runname, "timeofrun": timeofrun, "sensors": sensors, "notes": notes,
-                                 "toshow": True, "filename": filename})
-            except Exception as e:
-                messagebox.showerror("Error", "Could not import data from '" + os.path.basename(filename) + "'.",
-                                     parent=self)
-                raise e
+        runs = [self.importRun(filename) for filename in filenames if not None]
 
         for run in runs:
             rootid = self.importList.insert("", "end",
